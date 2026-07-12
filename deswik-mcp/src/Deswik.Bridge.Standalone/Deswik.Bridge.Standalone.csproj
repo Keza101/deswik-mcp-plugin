@@ -1,0 +1,69 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>Deswik.Bridge.Standalone</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <!-- Use TcpBridge as entry point (simpler, no admin required) -->
+  <PropertyGroup>
+    <StartupObject>Deswik.Bridge.Standalone.TcpBridge</StartupObject>
+  </PropertyGroup>
+
+  <!-- Deswik API References -->
+  <PropertyGroup>
+    <DeswikDir Condition="'$(DeswikDir)' == ''">D:\Program Files\Deswik\Deswik.Suite 2025.2</DeswikDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Project reference to Bridge library -->
+    <ProjectReference Include="..\Deswik.Bridge\Deswik.Bridge.csproj" />
+
+    <!-- Deswik API References (for production use) -->
+    <Reference Include="Deswik.Scheduler.API">
+      <HintPath>$(DeswikDir)\Deswik.Scheduler.API.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Deswik.Scheduler.API.Contracts">
+      <HintPath>$(DeswikDir)\Deswik.Scheduler.API.Contracts.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Deswik.Scheduler.Contracts">
+      <HintPath>$(DeswikDir)\Deswik.Scheduler.Contracts.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Deswik.Scheduler.Engine">
+      <HintPath>$(DeswikDir)\Deswik.Scheduler.Engine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Deswik.LHS.CAD.API">
+      <HintPath>$(DeswikDir)\Deswik.LHS.CAD.API.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Deswik.LHS">
+      <HintPath>$(DeswikDir)\Deswik.LHS.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Deswik.LHS.DAL">
+      <HintPath>$(DeswikDir)\Deswik.LHS.DAL.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Deswik.CAD">
+      <HintPath>$(DeswikDir)\Deswik.CAD.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Deswik.CAD.Core">
+      <HintPath>$(DeswikDir)\Deswik.CAD.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Deswik.Graphics">
+      <HintPath>$(DeswikDir)\Deswik.Graphics.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

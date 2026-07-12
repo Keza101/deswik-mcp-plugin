@@ -1,0 +1,20 @@
+# Whitelist approach: ignore everything, then re-include only the
+# open-sourceable CAD addin stack. SchedAddin, mine-site standards,
+# Deswik documentation, analysis scripts and certificates stay local.
+/*
+!.gitignore
+!README.md
+!deswik-mcp/
+deswik-mcp/*
+!deswik-mcp/src/
+deswik-mcp/src/*
+!deswik-mcp/src/Deswik.Addin/
+!deswik-mcp/src/Deswik.Bridge/
+!deswik-mcp/src/Deswik.Bridge.Standalone/
+!deswik-mcp/tools/
+deswik-mcp/tools/*
+!deswik-mcp/tools/deswik.ps1
+
+# build output
+**/bin/
+**/obj/

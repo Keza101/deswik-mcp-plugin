@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <OutputType>Library</OutputType>
+    <AssemblyName>Deswik.Addin</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <!-- Match the Deswik 2025.2 build so the plugin host's version check passes. -->
+    <FileVersion>2025.2.3203.55048</FileVersion>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <DeswikDir Condition="'$(DeswikDir)' == ''">D:\Program Files\Deswik\Deswik.Suite 2025.2</DeswikDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Deswik.Graphics">
+      <HintPath>$(DeswikDir)\Deswik.Graphics.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Deswik.Common.Utilities">
+      <HintPath>$(DeswikDir)\Deswik.Common.Utilities.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Deswik.Common.Core">
+      <HintPath>$(DeswikDir)\Deswik.Common.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Deswik.Geometry">
+      <HintPath>$(DeswikDir)\Deswik.Geometry.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Deswik.OPDB.Common">
+      <HintPath>$(DeswikDir)\Deswik.OPDB.Common.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="VectorDraw.Core.6">
+      <HintPath>$(DeswikDir)\VectorDraw.Core.6.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Deswik.Bridge\Deswik.Bridge.csproj" />
+  </ItemGroup>
+
+</Project>
