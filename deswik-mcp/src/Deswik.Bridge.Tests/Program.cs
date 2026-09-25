@@ -152,7 +152,7 @@ static Task TestSidecarIntegrity()
 
 static async Task TestSidecarInspect()
 {
-    var sample = @"W:\AI_Deswik\tests\archive_ddf\SDK - Stope Design Layout.ddf";
+    var sample = @"W:\deswik-mcp-plugin\tests\archive_ddf\SDK - Stope Design Layout.ddf";
     var command = new McpCommand
     {
         Id = "sidecar-inspect",

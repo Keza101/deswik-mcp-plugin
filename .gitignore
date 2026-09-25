@@ -2,9 +2,19 @@
 # open-sourceable CAD addin stack. SchedAddin, mine-site standards,
 # Deswik documentation, analysis scripts and certificates stay local.
 /*
+*.ddf
+*.duf
+*.duf.lck
+docs/Backup/
 !.gitignore
 !README.md
 !docs/
+!deswik_pm/
+!tests/
+tests/*
+!tests/archive_ddf/
+tests/archive_ddf/*
+!tests/archive_ddf/SDK - Stope Design Layout.ddf
 !deswik-mcp/
 deswik-mcp/*
 !deswik-mcp/src/
@@ -21,3 +31,6 @@ deswik-mcp/tools/*
 # build output
 **/bin/
 **/obj/
+**/__pycache__/
+*.py[cod]
+workflow-packages/

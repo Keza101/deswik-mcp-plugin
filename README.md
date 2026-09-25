@@ -29,6 +29,9 @@ Deswik.CAD ── Deswik.Addin (this plugin, loaded by Plugin Manager)
   pinned local Process Map sidecar actions.
 - `deswik-mcp/tools/deswik.ps1` — PowerShell client
   (`. deswik.ps1; dsw get_layers`).
+- `deswik_pm` — local copy of the Process Map SDK used by the bridge sidecar.
+  The SDK also remains in `W:\AI_Deswik`; keep both copies in sync when changing it.
+- `docs/bridge-phases` — bridge gate reports and operator acceptance steps.
 
 ## Build
 
@@ -44,8 +47,12 @@ dotnet test deswik-mcp/src/Deswik.Bridge.Tests -c Release `
 
 Process Map actions are `map.inspect`, `map.validate`, `map.generate`,
 `map.install`, and `map.inventory`. They use the pinned
-`W:\AI_Deswik\deswik_pm\sidecar.py` entry point and return SHA256 provenance
+`W:\deswik-mcp-plugin\deswik_pm\sidecar.py` entry point and return SHA256 provenance
 for every file read or written.
+
+The bridge's pinned sidecar SHA256 in `ProcessMapSidecar.cs` must match this
+local copy after any SDK update. Local acceptance packages stay in the ignored
+`workflow-packages` folder; the portable test fixture is in `tests/archive_ddf`.
 
 CAD production writes use the guarded flow documented in
 `docs/CAD-Actions.md`: preview on `_MCP_PREVIEW`, a default-No approval modal

@@ -104,5 +104,5 @@ the recorded handles only.
 . deswik-mcp/tools/deswik.ps1
 dsw get_cad_selection
 dsw preview_ugdrillholes @{ holes=@(@{ pivot=@(0,0,0); collar=@(0,0,1); toe=@(0,0,10); holeId="H1" }) }
-dsw map.inspect @{ path="W:\AI_Deswik\tests\archive_ddf\SDK - Stope Design Layout.ddf" }
+dsw map.inspect @{ path="W:\deswik-mcp-plugin\tests\archive_ddf\SDK - Stope Design Layout.ddf" }
 ```

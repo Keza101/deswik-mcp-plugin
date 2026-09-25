@@ -8,7 +8,7 @@ namespace Deswik.Bridge.Standalone;
 public sealed class ProcessMapSidecar
 {
     public const string PythonExe = @"C:\Python314\python.exe";
-    public const string EntryPoint = @"W:\AI_Deswik\deswik_pm\sidecar.py";
+    public const string EntryPoint = @"W:\deswik-mcp-plugin\deswik_pm\sidecar.py";
     public const string EntryPointSha256 = "B334E3A6B71D265385807F2CBCB3003226BB732789AB811E125ABF8428CA9960";
 
     private static readonly HashSet<string> Actions = new(StringComparer.Ordinal)
