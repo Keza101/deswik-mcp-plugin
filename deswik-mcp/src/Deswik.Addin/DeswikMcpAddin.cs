@@ -32,6 +32,9 @@ public class DeswikMcpAddin
     private BridgeClient? _bridgeClient;
     private SchedulerService? _schedulerService;
     private CadService? _cadService;
+    private CadReader? _cadReader;
+    private Deswik.Graphics.Application? _cadApplication;
+    private GuardedWriteCoordinator? _guardedWrites;
     private CancellationTokenSource? _cts;
     private SynchronizationContext? _uiContext;
     private McpStatusControl? _statusControl;
@@ -120,6 +123,9 @@ public class DeswikMcpAddin
         _bridgeClient = null;
         _schedulerService = null;
         _cadService = null;
+        _cadReader = null;
+        _cadApplication = null;
+        _guardedWrites = null;
         Log("MCP Bridge plugin unloaded");
     }
 
@@ -278,25 +284,25 @@ public class DeswikMcpAddin
                     HandleGetCadElements(id, parameters);
                     break;
                 case "create_cad_layer":
-                    HandleCreateCadLayer(id, parameters);
+                    HandleCreatePreviewLayer(id, parameters);
                     break;
                 case "draw_cad_text":
-                    HandleDrawCadText(id, parameters);
+                    SendError(id, action, "Writer requires the guarded write flow", "forbidden_unfenced");
                     break;
                 case "get_cad_selection":
                     HandleGetCadSelection(id);
                     break;
                 case "draw_cad_polylines":
-                    HandleDrawCadPolylines(id, parameters);
+                    SendError(id, action, "Writer requires the guarded write flow", "forbidden_unfenced");
                     break;
                 case "get_cad_polyface_info":
                     HandleGetCadPolyfaceInfo(id, parameters);
                     break;
                 case "slice_cad_polyface":
-                    HandleSliceCadPolyface(id, parameters);
+                    SendError(id, action, "Writer requires the guarded write flow", "forbidden_unfenced");
                     break;
                 case "draw_cad_blastholes":
-                    HandleDrawCadBlastHoles(id, parameters);
+                    SendError(id, action, "Writer requires the guarded write flow", "forbidden_unfenced");
                     break;
                 case "get_cad_blasthole_details":
                     HandleGetCadBlastHoleDetails(id, parameters);
@@ -308,7 +314,19 @@ public class DeswikMcpAddin
                     HandleGetCadPolylinesUnder(id, parameters);
                     break;
                 case "draw_cad_ugdrillholes":
-                    HandleDrawCadUGDrillHoles(id, parameters);
+                    SendError(id, action, "Writer requires the guarded write flow", "forbidden_unfenced");
+                    break;
+                case "preview_ugdrillholes":
+                    HandlePreviewUGDrillHoles(id, parameters);
+                    break;
+                case "prepare_rollback_ugdrillholes":
+                    HandlePrepareRollback(id, parameters);
+                    break;
+                case "_commit_ugdrillholes_authorized":
+                    HandleAuthorizedCommit(id, parameters);
+                    break;
+                case "_rollback_ugdrillholes_authorized":
+                    HandleAuthorizedRollback(id, parameters);
                     break;
                 case "send_hello":
                     HandleSendHello(id);
@@ -319,6 +337,11 @@ public class DeswikMcpAddin
                     break;
             }
         }
+        catch (GuardedWriteException ex)
+        {
+            Log($"Guarded write refused {action}: {ex.Message}");
+            SendError(id, action, ex.Message, ex.ErrorCode);
+        }
         catch (Exception ex)
         {
             Log($"Error handling command {action}: {ex}");
@@ -326,14 +349,15 @@ public class DeswikMcpAddin
         }
     }
 
-    private void SendError(string id, string action, string error)
+    private void SendError(string id, string action, string error, string errorCode = "ADDIN_ERROR")
     {
         _bridgeClient?.SendAsync(new
         {
             id,
             action = action + "_result",
             data = (object?)null,
-            error
+            error,
+            errorCode
         });
     }
 
@@ -530,9 +554,21 @@ public class DeswikMcpAddin
 
     private CadReader RequireCadReader()
     {
-        var app = Application
-            ?? throw new InvalidOperationException("CAD Application not attached to plugin");
-        return new CadReader(app);
+        var app = Deswik.Common.Utilities.DeswikApplication.CurrentOpenDoc as Deswik.Graphics.Application
+            ?? throw new InvalidOperationException("No active CAD document is attached to the plugin");
+        if (!ReferenceEquals(app, _cadApplication))
+        {
+            _cadApplication = app;
+            _cadReader = new CadReader(app);
+            _guardedWrites = null;
+        }
+        return _cadReader!;
+    }
+
+    private GuardedWriteCoordinator RequireGuardedWrites()
+    {
+        var reader = RequireCadReader();
+        return _guardedWrites ??= new GuardedWriteCoordinator(reader);
     }
 
     private void HandleGetCadDocument(string id)
@@ -587,10 +623,12 @@ public class DeswikMcpAddin
         });
     }
 
-    private void HandleCreateCadLayer(string id, System.Text.Json.JsonElement parameters)
+    private void HandleCreatePreviewLayer(string id, System.Text.Json.JsonElement parameters)
     {
         string name = parameters.GetProperty("name").GetString()
             ?? throw new ArgumentException("'name' is required");
+        if (!string.Equals(name, GuardedWriteCoordinator.PreviewLayer, StringComparison.Ordinal))
+            throw new GuardedWriteException("forbidden_unfenced", "Only the exact _MCP_PREVIEW layer may be created without a token");
 
         var data = OnUiThread(() => RequireCadReader().CreateLayer(name));
         _bridgeClient?.SendAsync(new
@@ -599,6 +637,141 @@ public class DeswikMcpAddin
             action = "create_cad_layer_result",
             data
         });
+    }
+
+    private void HandlePreviewUGDrillHoles(string id, System.Text.Json.JsonElement parameters)
+    {
+        var specs = ParseGuardedHoles(parameters);
+        var preview = OnUiThread(() => RequireGuardedWrites().Preview(specs));
+        _bridgeClient?.SendAsync(new
+        {
+            id,
+            action = "preview_ugdrillholes_result",
+            data = preview
+        }).GetAwaiter().GetResult();
+
+        var accepted = OnUiThread(() => MessageBox.Show(
+            RenderManifest(preview.Manifest),
+            "Approve MCP UGDrillHole commit",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2) == DialogResult.Yes);
+        if (!accepted) return;
+
+        _bridgeClient?.SendAsync(new
+        {
+            id = preview.ApprovalId,
+            action = "_human_write_approval",
+            data = new { preview.ApprovalId }
+        }).GetAwaiter().GetResult();
+    }
+
+    private void HandleAuthorizedCommit(string id, System.Text.Json.JsonElement parameters)
+    {
+        var binding = ParseBinding(parameters);
+        var result = OnUiThread(() => RequireGuardedWrites().Commit(binding));
+        _bridgeClient?.SendAsync(new { id, action = "commit_ugdrillholes_result", data = result });
+    }
+
+    private void HandlePrepareRollback(string id, System.Text.Json.JsonElement parameters)
+    {
+        var commitId = GetString(parameters, "commitId", "CommitId");
+        var rollback = OnUiThread(() => RequireGuardedWrites().PrepareRollback(commitId));
+        _bridgeClient?.SendAsync(new
+        {
+            id,
+            action = "prepare_rollback_ugdrillholes_result",
+            data = new { rollback.ApprovalId, rollback.CommitId, rollback.Manifest, rollback.ManifestHash, rollback.Binding }
+        }).GetAwaiter().GetResult();
+
+        var accepted = OnUiThread(() => MessageBox.Show(
+            RenderManifest(rollback.Manifest),
+            "Approve MCP UGDrillHole rollback",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2) == DialogResult.Yes);
+        if (!accepted) return;
+        _bridgeClient?.SendAsync(new
+        {
+            id = rollback.ApprovalId,
+            action = "_human_write_approval",
+            data = new { rollback.ApprovalId }
+        }).GetAwaiter().GetResult();
+    }
+
+    private void HandleAuthorizedRollback(string id, System.Text.Json.JsonElement parameters)
+    {
+        var binding = ParseBinding(parameters);
+        var result = OnUiThread(() => RequireGuardedWrites().Rollback(binding));
+        _bridgeClient?.SendAsync(new { id, action = "rollback_ugdrillholes_result", data = result });
+    }
+
+    private static List<UGHoleSpec> ParseGuardedHoles(System.Text.Json.JsonElement parameters)
+    {
+        var specs = new List<UGHoleSpec>();
+        var order = 0;
+        foreach (var hole in parameters.GetProperty("holes").EnumerateArray())
+        {
+            double[] Point(string name)
+            {
+                var values = hole.GetProperty(name).EnumerateArray().Select(value => value.GetDouble()).ToArray();
+                if (values.Length != 3 || values.Any(value => double.IsNaN(value) || double.IsInfinity(value)))
+                    throw new ArgumentException($"'{name}' must contain three finite numbers");
+                return values;
+            }
+            var diameter = hole.TryGetProperty("diameter", out var diameterValue)
+                ? diameterValue.GetDouble() : 0.089;
+            if (diameter <= 0 || double.IsNaN(diameter) || double.IsInfinity(diameter))
+                throw new ArgumentException("'diameter' must be a positive finite number");
+            var holeId = SafeIdentifier(hole.TryGetProperty("holeId", out var identifier)
+                ? identifier.GetString() : null, $"H{order + 1}");
+            var pivotId = SafeIdentifier(hole.TryGetProperty("pivotId", out var pivot)
+                ? pivot.GetString() : null, "P1");
+            specs.Add(new UGHoleSpec(
+                Point("pivot"), Point("collar"), Point("toe"),
+                "MCP_APPROVED", pivotId, holeId, diameter,
+                $"{diameter * 1000:0} mm", order, null, 0));
+            order++;
+        }
+        return specs;
+    }
+
+    private static ApprovalBinding ParseBinding(System.Text.Json.JsonElement parameters) => new(
+        GetString(parameters, "approvalId", "ApprovalId"),
+        GetString(parameters, "operation", "Operation"),
+        GetString(parameters, "documentGuid", "DocumentGuid"),
+        GetString(parameters, "drawingPath", "DrawingPath"),
+        GetString(parameters, "targetLayer", "TargetLayer"),
+        GetString(parameters, "manifestHash", "ManifestHash"),
+        GetString(parameters, "sourceFingerprint", "SourceFingerprint"),
+        GetString(parameters, "recordId", "RecordId"));
+
+    private static string GetString(System.Text.Json.JsonElement value, string camel, string pascal)
+    {
+        if (value.TryGetProperty(camel, out var property) || value.TryGetProperty(pascal, out property))
+            return property.GetString() ?? throw new ArgumentException($"'{camel}' is required");
+        throw new ArgumentException($"'{camel}' is required");
+    }
+
+    private static string SafeIdentifier(string? value, string fallback)
+    {
+        var safe = new string((value ?? "").Where(character =>
+            char.IsLetterOrDigit(character) || character is '-' or '_' or '.').Take(32).ToArray());
+        return string.IsNullOrEmpty(safe) ? fallback : safe;
+    }
+
+    private static string RenderManifest(ChangeManifest manifest)
+    {
+        static string Line(string value) => new(value
+            .Where(character => character is not '\r' and not '\n' and not '|').Take(240).ToArray());
+        return
+            $"Operation: {Line(manifest.Operation)}\n" +
+            $"Document: {Line(manifest.DocumentGuid)}\n" +
+            $"Drawing: {Line(manifest.DrawingPath)}\n" +
+            $"Layer: {Line(manifest.TargetLayer)}\n" +
+            $"Holes: {manifest.HoleCount}\n" +
+            $"Hole IDs: {Line(string.Join(", ", manifest.HoleIds))}\n" +
+            $"Total metres: {manifest.TotalMetres:0.###}";
     }
 
     private void HandleDrawCadText(string id, System.Text.Json.JsonElement parameters)

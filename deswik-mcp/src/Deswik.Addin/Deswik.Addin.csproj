@@ -8,8 +8,9 @@
     <AssemblyName>Deswik.Addin</AssemblyName>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
-    <!-- Match the Deswik 2025.2 build so the plugin host's version check passes. -->
-    <FileVersion>2025.2.3203.55048</FileVersion>
+    <!-- Match the installed Deswik.Graphics build so the plugin host accepts it. -->
+    <AssemblyVersion>2025.2.3940.40169</AssemblyVersion>
+    <FileVersion>2025.2.3940.40169</FileVersion>
     <EnableDynamicLoading>true</EnableDynamicLoading>
   </PropertyGroup>
 

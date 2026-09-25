@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>Deswik.Bridge.Tests</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Deswik.Bridge\Deswik.Bridge.csproj" />
+    <ProjectReference Include="..\Deswik.Bridge.Standalone\Deswik.Bridge.Standalone.csproj" />
+  </ItemGroup>
+
+  <!--
+    This repository is usable offline and has no test framework packages.
+    Run the deterministic executable harness before VSTest; any failed
+    assertion exits non-zero and fails `dotnet test`.
+  -->
+  <Target Name="RunBridgeTestHarness" BeforeTargets="VSTest" DependsOnTargets="Build">
+    <Exec Command="&quot;$(TargetDir)$(AssemblyName).exe&quot;" />
+  </Target>
+
+</Project>

@@ -1,0 +1,793 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Deswik Workflow Bridge - Interactive Guide</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #13232d;
+      --muted: #5d6b73;
+      --line: #d8e0e4;
+      --soft: #f4f7f8;
+      --panel: #ffffff;
+      --teal: #087f86;
+      --teal-dark: #075e64;
+      --teal-soft: #e4f5f4;
+      --yellow: #f4c542;
+      --yellow-soft: #fff7d8;
+      --red: #bd3b38;
+      --red-soft: #fdebea;
+      --blue: #326fa8;
+      --blue-soft: #eaf3fb;
+      --shadow: 0 8px 24px rgba(19, 35, 45, .08);
+      --radius: 6px;
+      --mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+      --sans: Inter, "Segoe UI", Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      color: var(--ink);
+      background: #eef3f4;
+      font-family: var(--sans);
+      font-size: 15px;
+      line-height: 1.45;
+      letter-spacing: 0;
+    }
+    button, input { font: inherit; }
+    button { letter-spacing: 0; }
+    code, pre { font-family: var(--mono); }
+    a { color: var(--teal-dark); }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+    .topbar-main {
+      min-height: 58px;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      min-width: 240px;
+    }
+    .brand-mark {
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-weight: 800;
+      background: var(--teal);
+      border-radius: 4px;
+      box-shadow: inset -8px -8px 0 rgba(255,255,255,.14);
+    }
+    .brand strong { font-size: 18px; }
+    .brand small {
+      display: block;
+      margin-top: 1px;
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+    .system-strip {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .system-item { display: flex; align-items: center; gap: 7px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #38a169; }
+    .dot.warn { background: var(--yellow); }
+    .tabs {
+      display: flex;
+      gap: 3px;
+      padding: 0 24px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      border-top: 1px solid #edf1f2;
+    }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab {
+      min-height: 43px;
+      padding: 0 16px;
+      border: 0;
+      border-bottom: 3px solid transparent;
+      background: transparent;
+      color: #40515b;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .tab:hover { color: var(--teal-dark); background: #f8fbfb; }
+    .tab.active { color: var(--teal-dark); border-bottom-color: var(--teal); font-weight: 700; }
+
+    main { max-width: 1480px; margin: 0 auto; padding: 20px 24px 40px; }
+    .view { display: none; }
+    .view.active { display: block; animation: fade .18s ease; }
+    @keyframes fade { from { opacity: .45; transform: translateY(3px); } }
+
+    .page-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: flex-start;
+      margin-bottom: 16px;
+    }
+    .eyebrow {
+      margin: 0 0 4px;
+      color: var(--teal-dark);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { margin-bottom: 4px; font-size: 28px; line-height: 1.18; }
+    h2 { margin-bottom: 4px; font-size: 18px; }
+    h3 { margin-bottom: 6px; font-size: 15px; }
+    .lede { max-width: 840px; margin-bottom: 0; color: var(--muted); }
+    .facts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+    .fact {
+      padding: 7px 9px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--panel);
+      color: #3e4c54;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .fact strong { color: var(--ink); }
+
+    .band, .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .band { margin-bottom: 16px; padding: 16px; }
+    .panel { padding: 16px; }
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 18px;
+      margin-bottom: 14px;
+    }
+    .section-head p { margin: 0; color: var(--muted); font-size: 13px; }
+    .grid-2 { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(320px, .85fr); gap: 16px; }
+    .grid-even { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+
+    .architecture {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(128px, 1fr));
+      gap: 22px;
+      align-items: stretch;
+    }
+    .arch-node {
+      position: relative;
+      min-height: 148px;
+      padding: 15px 13px 12px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: #fbfcfc;
+      text-align: left;
+      cursor: pointer;
+    }
+    .arch-node::after {
+      content: "->";
+      position: absolute;
+      right: -20px;
+      top: 56px;
+      color: #829098;
+      font: 700 18px var(--mono);
+    }
+    .arch-node:last-child::after { display: none; }
+    .arch-node:hover { border-color: #91bdc0; }
+    .arch-node.active { border-color: var(--teal); background: var(--teal-soft); box-shadow: inset 0 0 0 1px var(--teal); }
+    .arch-id {
+      width: 32px;
+      height: 32px;
+      display: grid;
+      place-items: center;
+      margin-bottom: 12px;
+      background: #e7eef0;
+      color: var(--teal-dark);
+      border-radius: 4px;
+      font: 800 11px var(--mono);
+    }
+    .arch-node strong { display: block; margin-bottom: 6px; font-size: 14px; }
+    .arch-node span { display: block; color: var(--muted); font-size: 12px; }
+    .detail-drawer {
+      margin-top: 14px;
+      padding: 14px;
+      display: grid;
+      grid-template-columns: minmax(150px, .5fr) 1.5fr minmax(180px, .7fr);
+      gap: 20px;
+      border-left: 4px solid var(--teal);
+      background: var(--soft);
+    }
+    .detail-drawer p { margin: 0; color: var(--muted); font-size: 13px; }
+    .detail-meta { color: var(--teal-dark); font: 700 12px var(--mono); }
+
+    .callout {
+      padding: 13px 14px;
+      border-left: 4px solid var(--yellow);
+      background: var(--yellow-soft);
+      color: #4f4522;
+    }
+    .callout strong { display: block; margin-bottom: 3px; color: #3d3418; }
+    .callout.danger { border-left-color: var(--red); background: var(--red-soft); color: #65312f; }
+    .callout.info { border-left-color: var(--blue); background: var(--blue-soft); color: #294d6b; }
+
+    .status { display: inline-block; padding: 3px 7px; border-radius: 3px; font-size: 11px; font-weight: 800; white-space: nowrap; }
+    .status.now { color: #075e51; background: #d8f4e9; }
+    .status.next { color: #225b8a; background: #dfeefa; }
+    .status.manual { color: #6b5314; background: #fff0bd; }
+    .status.blocked { color: #813431; background: #f8dfdd; }
+
+    .integration-list { display: grid; gap: 10px; }
+    .integration-row {
+      display: grid;
+      grid-template-columns: 108px minmax(0, 1fr);
+      gap: 12px;
+      padding: 12px 0;
+      border-top: 1px solid var(--line);
+    }
+    .integration-row:first-child { border-top: 0; padding-top: 0; }
+    .integration-row p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+
+    .code-block {
+      position: relative;
+      margin: 10px 0 0;
+      padding: 14px 76px 14px 14px;
+      overflow: auto;
+      border: 1px solid #263c46;
+      border-radius: 5px;
+      background: #152831;
+      color: #e7f2f3;
+      font-size: 12px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      padding: 5px 9px;
+      border: 1px solid #62828d;
+      border-radius: 3px;
+      background: #203a45;
+      color: #fff;
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .copy-btn:hover { background: #2b4d59; }
+
+    .setup-layout { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 16px; }
+    .step-list { padding: 0; margin: 0; list-style: none; }
+    .step-button {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr) 18px;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 10px;
+      border: 0;
+      border-top: 1px solid var(--line);
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+    }
+    .step-list li:first-child .step-button { border-top: 0; }
+    .step-button.active { background: var(--teal-soft); }
+    .step-number { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: #dfe7ea; color: #48606a; font-weight: 800; }
+    .step-button.active .step-number { background: var(--teal); color: #fff; }
+    .step-button.done .step-number { background: #23845e; color: #fff; }
+    .step-button strong { display: block; font-size: 13px; }
+    .step-button small { color: var(--muted); }
+    .check { color: #23845e; font-weight: 900; }
+    .step-content { min-height: 450px; }
+    .step-content ul { padding-left: 20px; }
+    .step-content li { margin-bottom: 6px; }
+    .step-actions { display: flex; gap: 8px; margin-top: 18px; }
+    .button {
+      min-height: 36px;
+      padding: 7px 13px;
+      border: 1px solid var(--teal);
+      border-radius: 4px;
+      background: var(--teal);
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .button:hover { background: var(--teal-dark); }
+    .button.secondary { color: var(--teal-dark); background: #fff; }
+    .button.secondary:hover { background: var(--teal-soft); }
+    .button:disabled { cursor: not-allowed; opacity: .45; }
+
+    .sim-stages { display: grid; grid-template-columns: repeat(4, 1fr); margin-bottom: 16px; border-bottom: 1px solid var(--line); }
+    .sim-stage { position: relative; padding: 0 10px 13px 42px; min-height: 48px; color: var(--muted); }
+    .sim-stage::before { content: attr(data-step); position: absolute; left: 4px; top: 0; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: #dfe7ea; color: #53646d; font-weight: 800; }
+    .sim-stage.active { color: var(--ink); font-weight: 700; }
+    .sim-stage.active::before { background: var(--teal); color: #fff; }
+    .sim-stage.complete::before { background: #23845e; color: #fff; }
+    .sim-stage small { display: block; color: var(--muted); font-weight: 400; }
+    .sim-grid { display: grid; grid-template-columns: 230px minmax(300px, 1fr) minmax(280px, .85fr); gap: 12px; }
+    .surface { border: 1px solid var(--line); border-radius: 5px; background: #fbfcfc; }
+    .surface-head { padding: 10px 12px; border-bottom: 1px solid var(--line); font-weight: 800; font-size: 13px; }
+    .surface-body { padding: 12px; }
+    .source-tree { margin: 0; padding: 0; list-style: none; font-size: 13px; }
+    .source-tree li { display: flex; justify-content: space-between; gap: 8px; padding: 7px 0; border-bottom: 1px solid #e8edef; }
+    .source-tree li:last-child { border-bottom: 0; }
+    .metric { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+    .map-canvas {
+      position: relative;
+      min-height: 300px;
+      overflow: hidden;
+      background-color: #17303a;
+      background-image: linear-gradient(#24434d 1px, transparent 1px), linear-gradient(90deg, #24434d 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+    .mine-line { position: absolute; height: 2px; transform-origin: left center; background: #829da7; }
+    .mine-line.teal { background: #23bec1; box-shadow: 0 0 0 1px rgba(35,190,193,.15); }
+    .hole { position: absolute; width: 5px; height: 5px; border: 1px solid #b8d0d6; border-radius: 50%; background: #17303a; }
+    .map-label { position: absolute; bottom: 10px; left: 12px; color: #b9cdd2; font: 11px var(--mono); }
+    .result-list { margin: 0; padding: 0; list-style: none; }
+    .result-list li { display: grid; grid-template-columns: 10px 1fr; gap: 9px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
+    .result-list li:last-child { border-bottom: 0; }
+    .result-dot { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: #83939b; }
+    .result-dot.ok { background: #38a169; }
+    .result-dot.warn { background: var(--yellow); }
+    .result-dot.info { background: var(--blue); }
+    .sim-actions { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+    .sim-note { margin-left: auto; color: var(--muted); font-size: 12px; }
+
+    .filters { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
+    .filter { padding: 6px 10px; border: 1px solid var(--line); border-radius: 4px; background: #fff; cursor: pointer; color: #40515b; }
+    .filter.active { border-color: var(--teal); background: var(--teal-soft); color: var(--teal-dark); font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { padding: 9px 10px; text-align: left; color: #41515a; background: var(--soft); border: 1px solid var(--line); }
+    td { padding: 9px 10px; border: 1px solid var(--line); vertical-align: top; }
+    td code { font-size: 11px; overflow-wrap: anywhere; }
+    tr[hidden] { display: none; }
+
+    .safety-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .rule { padding: 14px; border-top: 3px solid var(--teal); background: var(--soft); }
+    .rule.warn { border-top-color: var(--yellow); }
+    .rule.stop { border-top-color: var(--red); }
+    .rule p { margin: 0; color: var(--muted); font-size: 13px; }
+    .checklist { display: grid; gap: 8px; }
+    .check-row { display: flex; align-items: flex-start; gap: 9px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+    .check-row:last-child { border-bottom: 0; }
+    .check-row input { margin-top: 3px; accent-color: var(--teal); }
+    .check-row label { cursor: pointer; }
+    .check-row small { display: block; color: var(--muted); }
+
+    footer { max-width: 1480px; margin: 0 auto; padding: 0 24px 28px; color: var(--muted); font-size: 12px; }
+    .footer-inner { display: flex; justify-content: space-between; gap: 16px; padding-top: 12px; border-top: 1px solid #ccd7db; }
+
+    @media (max-width: 1100px) {
+      .architecture { grid-template-columns: repeat(3, 1fr); }
+      .arch-node:nth-child(3)::after { display: none; }
+      .grid-2, .setup-layout { grid-template-columns: 1fr; }
+      .sim-grid { grid-template-columns: 1fr 1fr; }
+      .sim-grid .surface:first-child { grid-column: 1 / -1; }
+      .safety-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 720px) {
+      body { font-size: 14px; }
+      .topbar-main { padding: 0 14px; }
+      .brand { min-width: 0; }
+      .brand small, .system-item:not(:first-child) { display: none; }
+      .system-strip { gap: 8px; }
+      .tabs { padding: 0 8px; }
+      .tab { padding: 0 11px; }
+      main { padding: 14px 12px 30px; }
+      .page-head { display: block; }
+      .facts { justify-content: flex-start; margin-top: 12px; }
+      h1 { font-size: 23px; }
+      .architecture { grid-template-columns: 1fr; gap: 10px; }
+      .arch-node { min-height: 0; }
+      .arch-node::after { display: none; }
+      .detail-drawer { grid-template-columns: 1fr; gap: 8px; }
+      .grid-even, .sim-grid, .safety-grid { grid-template-columns: 1fr; }
+      .sim-grid .surface:first-child { grid-column: auto; }
+      .sim-stages { grid-template-columns: 1fr 1fr; row-gap: 10px; }
+      .sim-stage { padding-left: 38px; }
+      .map-canvas { min-height: 240px; }
+      .integration-row { grid-template-columns: 86px minmax(0, 1fr); }
+      .setup-layout { display: block; }
+      .step-list { display: flex; overflow-x: auto; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
+      .step-list li { flex: 0 0 180px; }
+      .step-button { border-top: 0; border-left: 1px solid var(--line); }
+      .step-list li:first-child .step-button { border-left: 0; }
+      .step-content { min-height: 0; }
+      .code-block { padding-right: 14px; padding-top: 48px; }
+      .footer-inner { display: block; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-main">
+      <div class="brand">
+        <div class="brand-mark">DW</div>
+        <div><strong>Deswik Workflow Bridge</strong><small>Process maps + live CAD</small></div>
+      </div>
+      <div class="system-strip" aria-label="Project status">
+        <div class="system-item"><span class="dot"></span><span>SDK tests passing</span></div>
+        <div class="system-item"><span class="dot"></span><span>Bridge built</span></div>
+        <div class="system-item"><span class="dot warn"></span><span>CAD validation required</span></div>
+      </div>
+    </div>
+    <nav class="tabs" aria-label="Guide sections">
+      <button class="tab active" data-view="overview">Overview</button>
+      <button class="tab" data-view="architecture">Architecture</button>
+      <button class="tab" data-view="setup">Setup</button>
+      <button class="tab" data-view="workflow">Workflow</button>
+      <button class="tab" data-view="capabilities">Capabilities</button>
+      <button class="tab" data-view="safety">Safety</button>
+    </nav>
+  </header>
+
+  <main>
+    <section class="view active" id="overview">
+      <div class="page-head">
+        <div>
+          <p class="eyebrow">Integration finding</p>
+          <h1>Use Process Maps as the operator workflow, and the add-in as the live CAD tool layer.</h1>
+          <p class="lede">The repositories complement each other. The Python SDK can inspect, validate, edit, and generate controlled <code>.ddf</code> workflows. The C# add-in can read live Deswik geometry and create native UG drill-hole entities through the local bridge.</p>
+        </div>
+        <div class="facts">
+          <span class="fact"><strong>26</strong> verified map commands</span>
+          <span class="fact"><strong>16</strong> live CAD actions</span>
+          <span class="fact"><strong>74</strong> command registrations</span>
+        </div>
+      </div>
+
+      <section class="band">
+        <div class="section-head"><div><h2>End-to-end architecture</h2><p>Select a component to see what it owns and where its trust boundary sits.</p></div><span class="status next">Recommended design</span></div>
+        <div class="architecture" id="overviewArchitecture"></div>
+        <div class="detail-drawer" id="overviewDetail" aria-live="polite"></div>
+      </section>
+
+      <div class="grid-2">
+        <section class="panel">
+          <div class="section-head"><div><h2>What can be integrated</h2><p>Smallest useful increments, ordered by value and confidence.</p></div></div>
+          <div class="integration-list">
+            <div class="integration-row"><span class="status now">Ready now</span><div><strong>Portable workflow packages</strong><p>Generate and validate approved <code>.ddf</code> maps on the personal laptop, then transfer the map, manifest, hash, and acceptance checklist with the existing add-in bundle.</p></div></div>
+            <div class="integration-row"><span class="status now">Ready now</span><div><strong>Guided UG design maps</strong><p>Build Deswik-native steps for selection, input prompts, layer creation, deterministic macros, review, and completion status. The existing stope layout generator proves the pattern.</p></div></div>
+            <div class="integration-row"><span class="status next">Next build</span><div><strong>Process Map sidecar actions</strong><p>Add typed bridge actions for map inspection, validation, generation, installation, and inventory. Run the Python SDK as a local sidecar first; porting the binary container to C# is unnecessary.</p></div></div>
+            <div class="integration-row"><span class="status next">Next build</span><div><strong>Controlled map-to-bridge launcher</strong><p>Use the verified <code>ExecuteFile</code> node command to call one signed, allowlisted helper. It can request live CAD context, create a preview layer, and return an audit result.</p></div></div>
+            <div class="integration-row"><span class="status blocked">Capture first</span><div><strong>Direct Plugin node calls</strong><p>The add-in already exposes <code>MCP_STATUS</code> and <code>MCP_RECONNECT</code> through <code>GetCommands</code>. The Process Map <code>Plugin</code> payload remains unverified, so capture a real node before generating it.</p></div></div>
+          </div>
+        </section>
+
+        <aside class="panel">
+          <div class="section-head"><div><h2>Recommended pilot</h2><p>A narrow integration with a clear acceptance path.</p></div></div>
+          <ol>
+            <li>Generate a three-stage map: <strong>Inspect stope</strong>, <strong>Preview rings</strong>, <strong>Approve write</strong>.</li>
+            <li>Keep calculations deterministic outside CAD.</li>
+            <li>Write proposed geometry to a temporary preview layer.</li>
+            <li>Commit native <code>UGDrillHole</code> entities only after confirmation.</li>
+            <li>Record source handles, parameters, warnings, created handles, versions, and disposition.</li>
+          </ol>
+          <div class="callout"><strong>Boundary that stays manual</strong>Binary round-trip validation cannot prove a node runs correctly. Open every generated map in Deswik.CAD and click each changed node before production use.</div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="view" id="architecture">
+      <div class="page-head"><div><p class="eyebrow">System design</p><h1>One workflow, two execution environments</h1><p class="lede">Process-map logic is packaged and inspectable. Live CAD calls stay inside the Deswik add-in and are marshalled onto the CAD UI thread.</p></div></div>
+      <section class="band">
+        <div class="architecture" id="fullArchitecture"></div>
+        <div class="detail-drawer" id="fullDetail"></div>
+      </section>
+      <div class="grid-even">
+        <section class="panel">
+          <h2>Current, verified path</h2>
+          <pre class="code-block">Personal laptop
+  deswik_pm -> inspect / validate / generate .ddf
+       |
+       v
+Approved transfer package
+  .ddf + manifest + SHA256 + acceptance checklist
+       |
+       v
+Work computer
+  Deswik.CAD loads map + add-in
+  Bridge runs on 127.0.0.1:9595<button class="copy-btn" type="button">Copy</button></pre>
+        </section>
+        <section class="panel">
+          <h2>Target live path</h2>
+          <pre class="code-block">Process Map node
+  -> allowlisted helper action
+  -> local bridge request
+  -> CAD add-in on UI thread
+  -> preview layer + change manifest
+  -> engineer confirmation
+  -> native UGDrillHole commit
+  -> audit result + node status<button class="copy-btn" type="button">Copy</button></pre>
+        </section>
+      </div>
+      <section class="band" style="margin-top:16px">
+        <div class="section-head"><div><h2>Ownership boundaries</h2><p>Keep each responsibility in the repository that already proves it.</p></div></div>
+        <table>
+          <thead><tr><th>Concern</th><th>Owner</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td><code>.ddf</code> container, tags, commands</td><td>Process Map SDK</td><td>Byte-identical round trip and command parsing are already tested.</td></tr>
+            <tr><td>UG calculations and validation</td><td>Pure shared domain library</td><td>Deterministic, unit-testable, independent of the CAD UI.</td></tr>
+            <tr><td>Live selection and geometry</td><td>CAD add-in</td><td>It owns the licensed Deswik object model and UI-thread access.</td></tr>
+            <tr><td>Routing and job state</td><td>Local bridge</td><td>It already routes registered capabilities over loopback TCP.</td></tr>
+            <tr><td>Operator gates and progress</td><td>Process Map</td><td>Native guided steps, prompts, layers, and node statuses.</td></tr>
+            <tr><td>AI tool contract</td><td>Future MCP adapter</td><td>The current newline-delimited JSON bridge is not an MCP server yet.</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </section>
+
+    <section class="view" id="setup">
+      <div class="page-head"><div><p class="eyebrow">Portable deployment</p><h1>Set up without admin installation</h1><p class="lede">Build and validate on the personal laptop, transfer the approved ZIP and workflow package, then register the add-in through Deswik.CAD's Plugin Manager.</p></div></div>
+      <div class="setup-layout">
+        <aside class="panel"><ol class="step-list" id="stepList"></ol></aside>
+        <section class="panel step-content" id="stepContent" aria-live="polite"></section>
+      </div>
+    </section>
+
+    <section class="view" id="workflow">
+      <div class="page-head"><div><p class="eyebrow">Operator walkthrough</p><h1>Follow the proposed design transaction</h1><p class="lede">Advance the simulator to see which component acts, what evidence it returns, and where human approval is mandatory.</p></div></div>
+      <section class="panel">
+        <div class="sim-stages" id="simStages"></div>
+        <div class="sim-grid">
+          <section class="surface"><div class="surface-head">Design context</div><div class="surface-body"><ul class="source-tree" id="sourceTree"></ul></div></section>
+          <section class="surface"><div class="surface-head" id="canvasTitle">Selected stope and drive</div><div class="map-canvas" id="mapCanvas" aria-label="Schematic stope plan"></div></section>
+          <section class="surface"><div class="surface-head">Evidence and gates</div><div class="surface-body"><ul class="result-list" id="resultList"></ul></div></section>
+        </div>
+        <div class="sim-actions">
+          <button class="button secondary" id="simBack">Back</button>
+          <button class="button" id="simNext">Run next stage</button>
+          <button class="button secondary" id="simReset">Reset</button>
+          <span class="sim-note" id="simNote"></span>
+        </div>
+      </section>
+      <div class="callout danger" style="margin-top:16px"><strong>This simulator does not perform engineering calculations.</strong>It explains the integration contract. Production burden, spacing, drilling, charging, timing, and acceptance rules must come from versioned, site-approved standards.</div>
+    </section>
+
+    <section class="view" id="capabilities">
+      <div class="page-head"><div><p class="eyebrow">Implementation map</p><h1>Current and proposed capabilities</h1><p class="lede">Filter by delivery state. "Current" means present in source code; it does not imply live validation on this Deswik installation.</p></div></div>
+      <section class="panel">
+        <div class="filters" id="capFilters">
+          <button class="filter active" data-filter="all">All</button>
+          <button class="filter" data-filter="now">Current</button>
+          <button class="filter" data-filter="next">Next build</button>
+          <button class="filter" data-filter="manual">Manual gate</button>
+          <button class="filter" data-filter="blocked">Capture first</button>
+        </div>
+        <div style="overflow:auto">
+          <table id="capTable"><thead><tr><th>Capability</th><th>Repository</th><th>Status</th><th>Integration use</th></tr></thead><tbody></tbody></table>
+        </div>
+      </section>
+    </section>
+
+    <section class="view" id="safety">
+      <div class="page-head"><div><p class="eyebrow">Production controls</p><h1>Automate the workflow, not the engineering authority</h1><p class="lede">The safe pattern is inspect, calculate, validate, preview, confirm, commit, and reconcile. Every transition should leave evidence.</p></div></div>
+      <div class="safety-grid">
+        <div class="rule"><h3>Deterministic core</h3><p>Keep geometry and design checks in pure functions with explicit units, conventions, tolerances, and profile versions.</p></div>
+        <div class="rule warn"><h3>Preview before write</h3><p>Place proposals on a temporary layer and return a change manifest before creating or modifying production entities.</p></div>
+        <div class="rule stop"><h3>Fail closed</h3><p>Never return demo data for a requested live operation. Stop when the add-in, capability, document, or standard profile is unavailable.</p></div>
+        <div class="rule"><h3>Proven commands only</h3><p>Generate only verified Process Map commands. Capture real payloads before promoting unverified command types.</p></div>
+        <div class="rule warn"><h3>Local allowlist</h3><p>If <code>ExecuteFile</code> is used, permit one signed helper and typed actions. Do not expose arbitrary commands or paths.</p></div>
+        <div class="rule stop"><h3>CAD acceptance</h3><p>Open the generated map in Deswik.CAD, run every changed node, inspect geometry, and complete the site acceptance checklist.</p></div>
+      </div>
+      <section class="band" style="margin-top:16px">
+        <div class="section-head"><div><h2>Acceptance checklist</h2><p>Local state is saved in this browser only.</p></div><span class="status manual" id="safetyProgress">0 / 7 complete</span></div>
+        <div class="checklist" id="safetyChecklist"></div>
+      </section>
+    </section>
+  </main>
+
+  <footer><div class="footer-inner"><span>Source analysis: <code>W:\AI_Deswik</code> + <code>W:\deswik-mcp-plugin</code></span><span>Generated guide: 2026-09-21</span></div></footer>
+
+  <script>
+    const architecture = [
+      { id: 'SDK', name: 'Process Map SDK', summary: 'Inspect, validate, edit, and generate .ddf maps.', owns: 'DDF container, node tags, command payloads, macro templates', boundary: 'Python; no live CAD object model', status: '26 verified / 48 unverified commands' },
+      { id: 'PKG', name: 'Workflow package', summary: 'Portable, reviewable deployment unit.', owns: '.ddf, source spec, manifest, SHA256, versions, checklist', boundary: 'No client maps or proprietary help content', status: 'Proposed packaging convention' },
+      { id: 'PM', name: 'Deswik Process Map', summary: 'Native operator steps and progress state.', owns: 'Prompts, layers, macros, status nodes, approved launch actions', boundary: 'Must be validated interactively in Deswik.CAD', status: 'Generation proven; links not modeled' },
+      { id: 'ADD', name: 'CAD add-in', summary: 'Reads and writes the active drawing.', owns: 'Selection, entities, polyfaces, BlastHole, UGDrillHole', boundary: 'Deswik UI thread and licensed local APIs', status: '16 registered CAD actions' },
+      { id: 'BRG', name: 'Local bridge', summary: 'Routes typed requests to capability providers.', owns: 'Loopback TCP, request IDs, routing, timeouts', boundary: 'Custom JSON, 15 s timeout, demo fallback today', status: 'Built self-contained for win-x64' },
+      { id: 'MCP', name: 'MCP adapter / client', summary: 'Turns approved actions into discoverable tools.', owns: 'Typed schemas, tool descriptions, AI/client access', boundary: 'Not implemented; must distinguish live/demo/disconnected', status: 'Recommended next platform step' }
+    ];
+
+    function renderArchitecture(containerId, detailId) {
+      const container = document.getElementById(containerId);
+      const detail = document.getElementById(detailId);
+      container.innerHTML = architecture.map((item, i) => `<button class="arch-node${i === 0 ? ' active' : ''}" data-index="${i}"><span class="arch-id">${item.id}</span><strong>${i + 1}. ${item.name}</strong><span>${item.summary}</span></button>`).join('');
+      const show = (i) => {
+        const item = architecture[i];
+        container.querySelectorAll('.arch-node').forEach((node, n) => node.classList.toggle('active', n === i));
+        detail.innerHTML = `<div><div class="detail-meta">${item.id}</div><strong>${item.name}</strong></div><p><strong>Owns:</strong><br>${item.owns}<br><br><strong>Boundary:</strong><br>${item.boundary}</p><div><span class="status ${i < 4 ? 'now' : 'next'}">${i < 4 ? 'Current foundation' : 'Platform work'}</span><p style="margin-top:8px">${item.status}</p></div>`;
+      };
+      container.addEventListener('click', e => { const node = e.target.closest('.arch-node'); if (node) show(Number(node.dataset.index)); });
+      show(0);
+    }
+
+    const setupSteps = [
+      {
+        title: 'Prepare approved files', short: 'Transfer bundle',
+        body: String.raw`<h2>1. Prepare the approved transfer</h2><p>Use the existing self-contained Windows bundle for the bridge and add-in. Generate any Process Map files on the personal laptop so the work computer does not need Python.</p><ul><li>Bridge bundle: <code>deswik-mcp-2025.2-win-x64.zip</code></li><li>Recorded SHA256: <code>80DBB15EE7E55DF30394939BC9954EDA0F2ECC4A75A64FAF79337D61BBFA0539</code></li><li>Add only approved <code>.ddf</code> maps, a manifest, and a validation checklist.</li><li>Do not transfer production maps, client data, credentials, or Deswik binaries.</li></ul><pre class="code-block">Get-FileHash .\deswik-mcp-2025.2-win-x64.zip -Algorithm SHA256<button class="copy-btn" type="button">Copy</button></pre>`
+      },
+      {
+        title: 'Generate the workflow', short: 'On personal laptop',
+        body: String.raw`<h2>2. Generate and validate the map</h2><p>Use an approved, sanitized donor <code>.ddf</code>. The donor supplies appearance XML and the opaque binary tail that the SDK intentionally preserves.</p><pre class="code-block">cd W:\AI_Deswik
+python -m deswik_pm inspect "path\to\donor.ddf" --json
+python -m deswik_pm validate "path\to\donor.ddf" --json
+python -m deswik_pm draw circle --donor "path\to\donor.ddf" --out "package\pilot.ddf"
+python -m deswik_pm validate "package\pilot.ddf" --json<button class="copy-btn" type="button">Copy</button></pre><div class="callout"><strong>Do not generate from an unknown donor.</strong>The SDK can preserve and validate the container, but appearance XML and the binary tail are not authored from scratch.</div>`
+      },
+      {
+        title: 'Extract the bundle', short: 'Work computer',
+        body: String.raw`<h2>3. Extract into a user-writable folder</h2><p>No machine-wide install is required for the self-contained bridge. Use an approved folder such as your user profile or an approved tools drive.</p><pre class="code-block">$target = "$env:LOCALAPPDATA\DeswikMcp"
+New-Item -ItemType Directory -Force $target
+Expand-Archive .\deswik-mcp-2025.2-win-x64.zip $target -Force
+Get-ChildItem $target<button class="copy-btn" type="button">Copy</button></pre><p>Keep the folder stable after registering the add-in. Deswik loads the DLL from that path.</p>`
+      },
+      {
+        title: 'Start the local bridge', short: 'Loopback only',
+        body: String.raw`<h2>4. Start the bridge</h2><p>Run the bundled self-contained executable. It listens on <code>127.0.0.1:9595</code>, so traffic remains on the computer.</p><pre class="code-block">& "$env:LOCALAPPDATA\DeswikMcp\bridge\Deswik.Bridge.Standalone.exe"<button class="copy-btn" type="button">Copy</button></pre><div class="callout info"><strong>Current limitation</strong>The bridge falls back to plausible demo responses when no add-in owns an action. Production integration should implement explicit <code>live</code>, <code>demo</code>, and <code>disconnected</code> modes before broader use.</div>`
+      },
+      {
+        title: 'Load the CAD add-in', short: 'Deswik Plugin Manager',
+        body: String.raw`<h2>5. Register the add-in in Deswik.CAD</h2><ol><li>Open Deswik.CAD.</li><li>Open <strong>Tools -> Plugin Manager</strong>.</li><li>Add <code>addin\Deswik.Addin.dll</code> from the extracted folder.</li><li>Load the plugin and open the MCP status panel.</li><li>Confirm the bridge shows connected.</li></ol><p>The DLL is locked while CAD is running. Close Deswik.CAD before replacing or rebuilding it.</p>`
+      },
+      {
+        title: 'Install the map', short: 'Approved workflow',
+        body: String.raw`<h2>6. Install and run the Process Map</h2><p>Copy the approved map into the Deswik workflows location available to your user or site configuration. A common machine location is shown below, but follow the site's approved workflow path.</p><pre class="code-block">Copy-Item .\package\pilot.ddf "C:\ProgramData\Deswik\Workflows\pilot.ddf"<button class="copy-btn" type="button">Copy</button></pre><p>Open the Process Map window, load the map, and run each node against a non-production test drawing first.</p>`
+      },
+      {
+        title: 'Accept the workflow', short: 'Manual CAD test',
+        body: String.raw`<h2>7. Complete live acceptance</h2><ul><li>Confirm the correct Deswik version and active drawing.</li><li>Run every generated or changed node.</li><li>Verify created layers, geometry types, attributes, units, and coordinate conventions.</li><li>Confirm cancellation and error paths leave no production geometry.</li><li>Record the map hash, add-in version, bridge version, Deswik build, tester, and result.</li></ul><div class="callout danger"><strong>Required production gate</strong>A passing SDK test or bridge ping is not proof that a Process Map node executes correctly inside Deswik.CAD.</div>`
+      }
+    ];
+
+    let setupIndex = 0;
+    const completedSetup = new Set();
+    function renderSetup() {
+      document.getElementById('stepList').innerHTML = setupSteps.map((s, i) => `<li><button class="step-button${i === setupIndex ? ' active' : ''}${completedSetup.has(i) ? ' done' : ''}" data-step="${i}"><span class="step-number">${completedSetup.has(i) ? '&#10003;' : i + 1}</span><span><strong>${s.title}</strong><small>${s.short}</small></span><span class="check">${completedSetup.has(i) ? '&#10003;' : ''}</span></button></li>`).join('');
+      const content = document.getElementById('stepContent');
+      content.innerHTML = setupSteps[setupIndex].body + `<div class="step-actions"><button class="button secondary" id="stepPrev" ${setupIndex === 0 ? 'disabled' : ''}>Previous</button><button class="button" id="stepDone">${setupIndex === setupSteps.length - 1 ? 'Mark complete' : 'Complete and continue'}</button></div>`;
+      bindCopyButtons(content);
+      document.getElementById('stepPrev').addEventListener('click', () => { setupIndex--; renderSetup(); });
+      document.getElementById('stepDone').addEventListener('click', () => { completedSetup.add(setupIndex); if (setupIndex < setupSteps.length - 1) setupIndex++; renderSetup(); });
+    }
+
+    const simulation = [
+      { name: 'Inspect', small: 'Read selection', title: 'Selected stope and drive', note: 'Read-only CAD access', source: [['Stope solid', '1 selected'], ['Drive strings', '2'], ['Existing rings', '0'], ['Coordinate convention', 'site profile']], results: [['ok', 'Live add-in connection confirmed'], ['ok', 'Selection typed as stope context'], ['info', 'Source handles recorded'], ['warn', 'Mine-standard profile requires confirmation']] },
+      { name: 'Validate', small: 'Calculate and check', title: 'Ring layout calculation', note: 'No CAD write', source: [['Stope slices', '18'], ['Planned burden', '2.5 m'], ['Hole diameter', '89 mm'], ['Rig envelope', 'profile v7']], results: [['ok', 'Pure calculation completed'], ['ok', 'Units and angle convention recorded'], ['warn', '2 toe-spacing checks require review'], ['info', 'Calculation inputs hashed']] },
+      { name: 'Preview', small: 'Temporary layer', title: 'Proposed rings on preview layer', note: 'Engineer review required', source: [['Proposed rings', '14'], ['Proposed holes', '86'], ['Preview layer', '_MCP_PREVIEW'], ['Change manifest', '86 creates']], results: [['ok', 'Preview geometry created'], ['ok', 'Production layers unchanged'], ['warn', '2 flagged holes highlighted'], ['info', 'Approve or cancel; no silent commit']] },
+      { name: 'Commit', small: 'Native entities', title: 'Committed UGDrillHole design', note: 'Audited write', source: [['Approved rings', '14'], ['Native holes', '84'], ['Excluded holes', '2'], ['Audit record', 'complete']], results: [['ok', 'Confirmation token accepted'], ['ok', 'Native UGDrillHole entities created'], ['ok', 'Created handles recorded'], ['info', 'Process Map node marked complete']] }
+    ];
+    let simIndex = 0;
+    function drawMine(stage) {
+      const canvas = document.getElementById('mapCanvas');
+      const base = [
+        [12, 72, 46, -24, 'teal'], [42, 50, 38, 14, 'teal'], [71, 64, 24, 42, ''],
+        [22, 38, 28, 52, ''], [49, 53, 27, -48, ''], [69, 45, 20, 62, '']
+      ];
+      const extras = stage >= 1 ? [[33, 59, 25, -68, 'teal'], [39, 58, 24, -50, 'teal'], [45, 59, 23, -32, 'teal'], [51, 61, 22, -15, 'teal'], [56, 63, 21, 4, 'teal']] : [];
+      const lines = base.concat(extras).map(v => `<span class="mine-line ${v[4]}" style="left:${v[0]}%;top:${v[1]}%;width:${v[2]}%;transform:rotate(${v[3]}deg)"></span>`).join('');
+      const holes = stage >= 2 ? Array.from({length: 22}, (_, i) => `<span class="hole" style="left:${29 + (i % 6) * 6 + Math.floor(i / 6) * 2}%;top:${28 + (i % 4) * 13}%"></span>`).join('') : '';
+      canvas.innerHTML = lines + holes + `<span class="map-label">SCHEMATIC ONLY | Stage ${stage + 1}</span>`;
+    }
+    function renderSimulation() {
+      document.getElementById('simStages').innerHTML = simulation.map((s, i) => `<div class="sim-stage${i === simIndex ? ' active' : ''}${i < simIndex ? ' complete' : ''}" data-step="${i + 1}">${s.name}<small>${s.small}</small></div>`).join('');
+      const s = simulation[simIndex];
+      document.getElementById('canvasTitle').textContent = s.title;
+      document.getElementById('sourceTree').innerHTML = s.source.map(x => `<li><span>${x[0]}</span><span class="metric">${x[1]}</span></li>`).join('');
+      document.getElementById('resultList').innerHTML = s.results.map(x => `<li><span class="result-dot ${x[0]}"></span><span>${x[1]}</span></li>`).join('');
+      document.getElementById('simNote').textContent = s.note;
+      document.getElementById('simBack').disabled = simIndex === 0;
+      document.getElementById('simNext').disabled = simIndex === simulation.length - 1;
+      document.getElementById('simNext').textContent = simIndex === simulation.length - 2 ? 'Commit after approval' : 'Run next stage';
+      drawMine(simIndex);
+    }
+
+    const capabilities = [
+      ['Inspect and validate .ddf', 'Process Map SDK', 'now', 'Structured JSON output and round-trip verification.'],
+      ['Generate map from donor', 'Process Map SDK', 'now', 'Creates nodes using verified commands and preserved container sections.'],
+      ['Embedded Deswik.Graphics macro', 'Process Map SDK', 'now', 'Known-good macro templates; requires live CAD execution test.'],
+      ['Read selection and geometry', 'CAD add-in', 'now', 'Selection, layers, entities, polyfaces, slices, and drill-hole details.'],
+      ['Create native drill holes', 'CAD add-in', 'now', 'BlastHole and UGDrillHole write actions on the UI thread.'],
+      ['Route registered capabilities', 'Local bridge', 'now', 'Loopback newline-delimited JSON on port 9595.'],
+      ['Install / inventory process maps', 'SDK sidecar', 'next', 'Typed actions to validate, hash, install, list, and inspect maps.'],
+      ['Portable workflow manifest', 'Both', 'next', 'Map, source spec, versions, capabilities, hash, and acceptance record.'],
+      ['Preview / commit / rollback', 'CAD bridge', 'next', 'Temporary layers, change manifests, confirmation tokens, and recovery.'],
+      ['Async jobs and cancellation', 'Local bridge', 'next', 'Remove the 15-second ceiling for long calculations and writes.'],
+      ['Native MCP tool server', 'MCP adapter', 'next', 'Typed stdio tools over the existing local bridge.'],
+      ['Live / demo / disconnected state', 'Local bridge', 'next', 'Fail closed instead of silently returning demo data.'],
+      ['Direct Process Map Plugin command', 'Process Map SDK', 'blocked', 'Capture a real Plugin node payload before code generation.'],
+      ['Map links and connectors', 'Process Map SDK', 'blocked', 'Parsed in XML but not modeled for authoring.'],
+      ['Run changed nodes in Deswik.CAD', 'Engineer', 'manual', 'Required acceptance for every generated or edited map.'],
+      ['Approve production geometry', 'Engineer', 'manual', 'Review checks, exceptions, change manifest, and site standard.']
+    ];
+    function renderCapabilities(filter = 'all') {
+      const body = document.querySelector('#capTable tbody');
+      body.innerHTML = capabilities.map(row => `<tr ${filter !== 'all' && row[2] !== filter ? 'hidden' : ''}><td><strong>${row[0]}</strong></td><td>${row[1]}</td><td><span class="status ${row[2]}">${{now:'Current', next:'Next build', manual:'Manual gate', blocked:'Capture first'}[row[2]]}</span></td><td>${row[3]}</td></tr>`).join('');
+    }
+
+    const checks = [
+      ['SDK validation passed', 'Round trip, command parsing, and generated output checked.'],
+      ['Approved donor recorded', 'Source, Deswik version, and data classification are known.'],
+      ['Package hash verified', 'Transferred ZIP and workflow package match approved hashes.'],
+      ['Live mode confirmed', 'No demo or disconnected response can be mistaken for CAD data.'],
+      ['Preview reviewed', 'Geometry, warnings, units, conventions, and change manifest accepted.'],
+      ['Changed nodes run in CAD', 'Each node was clicked in a non-production acceptance drawing.'],
+      ['Audit record completed', 'Versions, operator, source handles, created handles, result, and time stored.']
+    ];
+    function renderSafety() {
+      const saved = JSON.parse(localStorage.getItem('deswik-guide-checks') || '[]');
+      document.getElementById('safetyChecklist').innerHTML = checks.map((x, i) => `<div class="check-row"><input type="checkbox" id="safe${i}" ${saved.includes(i) ? 'checked' : ''}><label for="safe${i}"><strong>${x[0]}</strong><small>${x[1]}</small></label></div>`).join('');
+      updateSafety();
+    }
+    function updateSafety() {
+      const selected = [...document.querySelectorAll('#safetyChecklist input')].map((el, i) => el.checked ? i : null).filter(v => v !== null);
+      localStorage.setItem('deswik-guide-checks', JSON.stringify(selected));
+      document.getElementById('safetyProgress').textContent = `${selected.length} / ${checks.length} complete`;
+    }
+
+    function bindCopyButtons(root = document) {
+      root.querySelectorAll('.copy-btn').forEach(btn => {
+        if (btn.dataset.bound) return;
+        btn.dataset.bound = 'true';
+        btn.addEventListener('click', async () => {
+          const text = btn.parentElement.textContent.replace(/Copy$/, '').trim();
+          await navigator.clipboard.writeText(text);
+          const old = btn.textContent;
+          btn.textContent = 'Copied';
+          setTimeout(() => btn.textContent = old, 1200);
+        });
+      });
+    }
+
+    document.querySelector('.tabs').addEventListener('click', e => {
+      const tab = e.target.closest('.tab');
+      if (!tab) return;
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === tab));
+      document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === tab.dataset.view));
+      history.replaceState(null, '', `#${tab.dataset.view}`);
+      window.scrollTo({top: 0});
+    });
+    document.getElementById('stepList').addEventListener('click', e => { const b = e.target.closest('.step-button'); if (b) { setupIndex = Number(b.dataset.step); renderSetup(); } });
+    document.getElementById('simBack').addEventListener('click', () => { if (simIndex > 0) { simIndex--; renderSimulation(); } });
+    document.getElementById('simNext').addEventListener('click', () => { if (simIndex < simulation.length - 1) { simIndex++; renderSimulation(); } });
+    document.getElementById('simReset').addEventListener('click', () => { simIndex = 0; renderSimulation(); });
+    document.getElementById('capFilters').addEventListener('click', e => { const f = e.target.closest('.filter'); if (!f) return; document.querySelectorAll('.filter').forEach(x => x.classList.toggle('active', x === f)); renderCapabilities(f.dataset.filter); });
+    document.getElementById('safetyChecklist').addEventListener('change', updateSafety);
+
+    renderArchitecture('overviewArchitecture', 'overviewDetail');
+    renderArchitecture('fullArchitecture', 'fullDetail');
+    renderSetup();
+    renderSimulation();
+    renderCapabilities();
+    renderSafety();
+    bindCopyButtons();
+
+    const initial = location.hash.slice(1);
+    const initialTab = document.querySelector(`.tab[data-view="${initial}"]`);
+    if (initialTab) initialTab.click();
+  </script>
+</body>
+</html>

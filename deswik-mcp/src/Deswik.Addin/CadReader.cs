@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using DwApplication = Deswik.Graphics.Application;
 using DwLayer = Deswik.Graphics.Primaries.Layer;
 using DwFigure = Deswik.Graphics.Primaries.Figure;
@@ -19,6 +23,20 @@ internal class CadReader
     public CadReader(DwApplication app)
     {
         _app = app;
+    }
+
+    public string DrawingPath
+    {
+        get
+        {
+            var filename = _app.Filename ?? "";
+            if (string.IsNullOrWhiteSpace(filename)) return "";
+            if (Path.IsPathRooted(filename)) return Path.GetFullPath(filename);
+            var directory = _app.FileDirectory ?? "";
+            return string.IsNullOrWhiteSpace(directory)
+                ? ""
+                : Path.GetFullPath(Path.Combine(directory, filename));
+        }
     }
 
     public object GetDocumentInfo()
@@ -123,7 +141,7 @@ internal class CadReader
         };
     }
 
-    private static string FigureType(DwFigure fig)
+    internal static string FigureType(DwFigure fig)
     {
         if (fig.IsPolyline) return "Polyline";
         if (fig.IsPolyface) return "Polyface";
@@ -192,7 +210,7 @@ internal class CadReader
     // Note: Deswik.Graphics.Geometry.Point exposes lowercase x/y/z.
     private static object Pt(Deswik.Graphics.Geometry.Point p) => new { x = p.x, y = p.y, z = p.z };
 
-    private DwFigure FindByHandle(ulong handle)
+    internal DwFigure FindByHandle(ulong handle)
     {
         foreach (var obj in _app.Layers)
         {
@@ -206,6 +224,127 @@ internal class CadReader
             }
         }
         throw new ArgumentException($"No figure with handle {handle}");
+    }
+
+    public IReadOnlyList<ulong> GetLayerHandles(string layerName)
+    {
+        var layer = _app.Layers.FindName(layerName);
+        if (layer?.Entities == null) return Array.Empty<ulong>();
+        var handles = new List<ulong>();
+        foreach (var entity in layer.Entities)
+            if (entity is DwFigure figure) handles.Add(figure.HandleID);
+        return handles;
+    }
+
+    public IReadOnlyList<ulong> GetSelectionHandles()
+    {
+        if (!_app.SelectionExists) return Array.Empty<ulong>();
+        return _app.Selections.SelectedEntities().OfType<DwFigure>()
+            .Select(figure => figure.HandleID).OrderBy(handle => handle).ToArray();
+    }
+
+    public IReadOnlyList<ulong> GetAllHandlesExceptLayer(string excludedLayer)
+    {
+        var handles = new List<ulong>();
+        foreach (var item in _app.Layers)
+        {
+            if (item is not DwLayer layer || layer.Deleted || !layer.IsLoaded ||
+                string.Equals(layer.Name, excludedLayer, StringComparison.Ordinal)) continue;
+            System.Collections.IEnumerable? entities;
+            try { entities = layer.Entities; } catch { continue; }
+            if (entities == null) continue;
+            foreach (var entity in entities)
+                if (entity is DwFigure figure) handles.Add(figure.HandleID);
+        }
+        handles.Sort();
+        return handles;
+    }
+
+    public string FingerprintHandles(IEnumerable<ulong> handles)
+    {
+        var rows = new List<string>();
+        foreach (var handle in handles.Distinct().OrderBy(value => value))
+        {
+            var figure = FindByHandle(handle);
+            var bounds = "<no-bounds>";
+            try
+            {
+                var box = figure.BoundingBox;
+                bounds = PointKey(box.Min) + "|" + PointKey(box.Max);
+            }
+            catch { }
+            var row = string.Join("|",
+                handle.ToString(CultureInfo.InvariantCulture),
+                figure.GUID?.ToString() ?? "",
+                FigureType(figure),
+                figure.Layer?.Name ?? "",
+                bounds);
+            if (figure.IsPolyface)
+            {
+                try
+                {
+                    var polyface = figure.asPolyface;
+                    row += string.Join("|", "", PointKey(polyface.CenterOfGravity),
+                        polyface.Volume.ToString("R", CultureInfo.InvariantCulture),
+                        polyface.VertexCount.ToString(CultureInfo.InvariantCulture));
+                }
+                catch { row += "|<polyface-unavailable>"; }
+            }
+            rows.Add(row);
+        }
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("\n", rows))));
+    }
+
+    private static string PointKey(Deswik.Graphics.Geometry.Point point) => string.Join(",",
+        point.x.ToString("R", CultureInfo.InvariantCulture),
+        point.y.ToString("R", CultureInfo.InvariantCulture),
+        point.z.ToString("R", CultureInfo.InvariantCulture));
+
+    public IReadOnlyList<ulong> DrawPreviewUGDrillHoles(IReadOnlyList<UGHoleSpec> specs)
+    {
+        var layer = _app.Layers.FindName(GuardedWriteCoordinator.PreviewLayer);
+        if (layer == null)
+        {
+            _app.Layers.Add(GuardedWriteCoordinator.PreviewLayer);
+            layer = _app.Layers.FindName(GuardedWriteCoordinator.PreviewLayer)
+                ?? throw new InvalidOperationException("Preview layer could not be created");
+        }
+
+        var handles = new List<ulong>();
+        try
+        {
+            foreach (var spec in specs)
+            {
+                var points = new[] { spec.Pivot, spec.Collar, spec.Toe }
+                    .Select(point => new Deswik.Graphics.Geometry.Point(point[0], point[1], point[2]))
+                    .ToList();
+                var polyline = new Deswik.Graphics.Figures.Polyline(points) { Layer = layer };
+                polyline.PenColor.SetRGB(255, 180, 0);
+                _app.ActiveLayout.Entities.AddItem(polyline);
+                handles.Add(polyline.HandleID);
+            }
+            _app.Regen(true);
+            return handles;
+        }
+        catch
+        {
+            DeleteExactHandles(handles);
+            throw;
+        }
+    }
+
+    public int DeleteExactHandles(IEnumerable<ulong> handles)
+    {
+        var deleted = 0;
+        foreach (var handle in handles.Distinct())
+        {
+            DwFigure figure;
+            try { figure = FindByHandle(handle); }
+            catch (ArgumentException) { continue; }
+            if (_app.ActiveLayout.Entities.Remove(figure)) deleted++;
+        }
+        if (deleted > 0) _app.Regen(true);
+        return deleted;
     }
 
     private Deswik.Graphics.Figures.Polyface RequirePolyface(ulong handle)
@@ -702,6 +841,37 @@ internal class CadReader
             handles,
             errors
         };
+    }
+
+    public IReadOnlyList<ulong> DrawUGDrillHolesGuarded(string layerName, IReadOnlyList<UGHoleSpec> specs)
+    {
+        var layer = _app.Layers.FindName(layerName);
+        if (layer == null)
+        {
+            _app.Layers.Add(layerName);
+            layer = _app.Layers.FindName(layerName)
+                ?? throw new InvalidOperationException($"Layer '{layerName}' could not be created");
+        }
+
+        var handles = new List<ulong>();
+        try
+        {
+            foreach (var spec in specs)
+            {
+                var result = DrawUGDrillHoles(layerName, new[] { spec });
+                var json = System.Text.Json.JsonSerializer.SerializeToElement(result);
+                var errors = json.GetProperty("errors");
+                if (errors.GetArrayLength() != 0)
+                    throw new InvalidOperationException(errors[0].GetString());
+                handles.Add(json.GetProperty("handles")[0].GetUInt64());
+            }
+            return handles;
+        }
+        catch
+        {
+            DeleteExactHandles(handles);
+            throw;
+        }
     }
 
     /// <summary>

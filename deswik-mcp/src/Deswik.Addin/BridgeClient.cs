@@ -20,6 +20,7 @@ internal class BridgeClient : IDisposable
     private readonly string _bridgeHost;
     private readonly int _bridgePort;
     private bool _isConnected;
+    private readonly SemaphoreSlim _writeLock = new(1, 1);
 
     public event Action<string>? OnLog;
     /// <summary>Raised for each command from the bridge: (requestId, action, params).</summary>
@@ -85,6 +86,8 @@ internal class BridgeClient : IDisposable
                         "get_cad_ugdrillhole_details",
                         "get_cad_polylines_under",
                         "draw_cad_ugdrillholes",
+                        "preview_ugdrillholes",
+                        "prepare_rollback_ugdrillholes",
                         "send_hello"
                     }
                 }
@@ -122,8 +125,16 @@ internal class BridgeClient : IDisposable
         {
             var json = JsonSerializer.Serialize(message);
             var data = Encoding.UTF8.GetBytes(json + "\n");
-            await _stream.WriteAsync(data);
-            await _stream.FlushAsync();
+            await _writeLock.WaitAsync();
+            try
+            {
+                await _stream.WriteAsync(data);
+                await _stream.FlushAsync();
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
         }
         catch (Exception ex)
         {

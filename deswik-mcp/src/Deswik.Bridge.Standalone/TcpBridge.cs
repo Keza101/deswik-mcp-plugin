@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using System.Security.Cryptography;
 using Deswik.Bridge.Models;
 using Deswik.Bridge.Services;
 
@@ -14,8 +15,8 @@ namespace Deswik.Bridge.Standalone;
 ///
 /// When the Deswik plugin connects and sends register_addin, commands whose
 /// action is in the addin's capability list are forwarded to the live Deswik
-/// instance; everything else (or everything, when no addin is connected) is
-/// answered with demo data.
+/// instance. Live requests fail closed when no provider owns the action.
+/// Synthetic responses require an explicit request mode of "demo".
 /// </summary>
 class TcpBridge
 {
@@ -27,17 +28,21 @@ class TcpBridge
 
     private static DemoSchedulerService? _schedulerService;
     private static DemoCommandHandler? _commandHandler;
+    private static readonly ProcessMapSidecar ProcessMaps = new();
+    private static readonly WriteTokenVault WriteTokens = new();
     private static bool _isRunning = true;
 
     // Connected Deswik addins (CAD, Sched, ...) routed by capability:
     // capability/action -> the addin connection that registered it.
     private static readonly Dictionary<string, ClientConnection> CapabilityMap =
         new(StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<ClientConnection> ConnectedAddins = new();
     private static readonly object AddinLock = new();
 
     // Requests forwarded to an addin, keyed by command id:
     // id -> (requester, addin the request went to).
     private static readonly ConcurrentDictionary<string, (ClientConnection Requester, ClientConnection Addin)> Pending = new();
+    private static readonly ConcurrentDictionary<string, (ClientConnection Addin, WriteBinding Binding)> PendingHumanApprovals = new();
 
     /// <summary>A connected TCP client with serialized writes.</summary>
     private class ClientConnection
@@ -53,6 +58,19 @@ class TcpBridge
             try
             {
                 await Writer.WriteLineAsync(line);
+            }
+            finally
+            {
+                WriteLock.Release();
+            }
+        }
+
+        public async Task SendRawAsync(string text)
+        {
+            await WriteLock.WaitAsync();
+            try
+            {
+                await Writer.WriteAsync(text);
             }
             finally
             {
@@ -76,7 +94,8 @@ class TcpBridge
             // Initialize demo services
             _schedulerService = new DemoSchedulerService();
             _commandHandler = new DemoCommandHandler(_schedulerService);
-            Log("Demo services initialized.");
+            Log("Explicit demo handler ready (used only when request mode is 'demo').");
+            Log("Pinned Process Map sidecar ready for map.* actions.");
 
             // Start TCP server
             await StartTcpServerAsync();
@@ -165,11 +184,18 @@ class TcpBridge
 
                     Log($"Received: {line}");
 
+                    if (!conn.IsAddin && BridgeResponsePolicy.IsHttpRequestLine(line))
+                    {
+                        await conn.SendRawAsync(BridgeResponsePolicy.HttpRejection());
+                        Log("Rejected HTTP client: port 9595 uses newline-delimited JSON over raw TCP.");
+                        break;
+                    }
+
                     try
                     {
                         if (conn.IsAddin)
                         {
-                            await HandleAddinMessageAsync(line);
+                            await HandleAddinMessageAsync(conn, line);
                         }
                         else
                         {
@@ -199,6 +225,20 @@ class TcpBridge
         var command = JsonSerializer.Deserialize<McpCommand>(line);
         if (command == null) return;
 
+        var invalidMode = BridgeResponsePolicy.ValidateRequestMode(command);
+        if (invalidMode != null)
+        {
+            await conn.SendLineAsync(JsonSerializer.Serialize(invalidMode));
+            return;
+        }
+
+        var refusedWrite = GuardedWritePolicy.RefuseUnfenced(command);
+        if (refusedWrite != null)
+        {
+            await conn.SendLineAsync(JsonSerializer.Serialize(refusedWrite));
+            return;
+        }
+
         // A Deswik plugin announces itself; remember which actions route to it.
         if (command.Action == "register_addin")
         {
@@ -226,6 +266,7 @@ class TcpBridge
             {
                 conn.IsAddin = true;
                 conn.AddinName = name;
+                ConnectedAddins.Add(conn);
                 foreach (var cap in capabilities)
                     CapabilityMap[cap] = conn;   // last registration wins
             }
@@ -233,6 +274,57 @@ class TcpBridge
             Log($"Addin '{name}' registered ({capabilities.Count} capabilities)");
             await conn.SendLineAsync(JsonSerializer.Serialize(
                 McpResponse.Ok(command.Id, new { registered = true, name })));
+            return;
+        }
+
+        if (McpResponseMode.IsDemoRequest(command.Mode))
+        {
+            var demoResponse = BridgeResponsePolicy.AsDemo(
+                await _commandHandler!.HandleCommandAsync(command));
+            var demoJson = JsonSerializer.Serialize(demoResponse);
+            await conn.SendLineAsync(demoJson);
+            Log($"Sent (explicit demo): {demoJson}");
+            return;
+        }
+
+        if (ProcessMapSidecar.CanHandle(command.Action))
+        {
+            var sidecarResponse = await ProcessMaps.InvokeAsync(command);
+            var sidecarJson = JsonSerializer.Serialize(sidecarResponse);
+            await conn.SendLineAsync(sidecarJson);
+            Log($"Sent (Process Map sidecar): {command.Action} (id={command.Id}, success={sidecarResponse.Success})");
+            return;
+        }
+
+        if (command.Action == GuardedWritePolicy.ApprovalAction)
+        {
+            var approvalId = GetStringParam(command, "approvalId");
+            var token = approvalId == null ? null : WriteTokens.GetApprovedToken(approvalId);
+            var approvalResponse = token == null
+                ? McpResponse.Fail(command.Id, "No accepted human approval is available", "approval_unavailable")
+                : McpResponse.Ok(command.Id, new { approvalId, token, expiresInSeconds = 600 });
+            await conn.SendLineAsync(JsonSerializer.Serialize(approvalResponse));
+            return;
+        }
+
+        if (command.Action is GuardedWritePolicy.CommitAction or GuardedWritePolicy.RollbackAction)
+        {
+            var token = GetStringParam(command, "token");
+            var operation = command.Action == GuardedWritePolicy.CommitAction ? "commit" : "rollback";
+            var consumed = token == null
+                ? new TokenConsumeResult(false, "token_invalid", null)
+                : WriteTokens.Consume(token, operation);
+            if (!consumed.Success || consumed.Binding == null)
+            {
+                await conn.SendLineAsync(JsonSerializer.Serialize(
+                    McpResponse.Fail(command.Id, "Write token was rejected", consumed.ErrorCode ?? "token_invalid")));
+                return;
+            }
+
+            var internalAction = operation == "commit"
+                ? GuardedWritePolicy.InternalCommitAction
+                : GuardedWritePolicy.InternalRollbackAction;
+            await ForwardAuthorizedWriteAsync(conn, command.Id, internalAction, consumed.Binding);
             return;
         }
 
@@ -265,19 +357,60 @@ class TcpBridge
             return;
         }
 
-        // No addin (or unsupported action): answer with demo data.
-        var response = await _commandHandler!.HandleCommandAsync(command);
+        bool hasConnectedAddin;
+        lock (AddinLock)
+        {
+            hasConnectedAddin = ConnectedAddins.Count > 0;
+        }
+
+        // Live requests fail closed. A connected addin without this
+        // capability is different from having no addin connected at all.
+        var response = BridgeResponsePolicy.NoProvider(command, hasConnectedAddin);
         var responseJson = JsonSerializer.Serialize(response);
         await conn.SendLineAsync(responseJson);
-        Log($"Sent (demo): {responseJson}");
+        Log($"Sent ({response.Mode}): {responseJson}");
     }
 
-    private static async Task HandleAddinMessageAsync(string line)
+    private static async Task HandleAddinMessageAsync(ClientConnection sender, string line)
     {
         // Addin replies look like { id, action: "*_result", data, error? }.
         using var doc = JsonDocument.Parse(line);
         var root = doc.RootElement;
         var id = root.TryGetProperty("id", out var i) ? i.GetString() : null;
+
+        if (root.TryGetProperty("action", out var action) &&
+            action.GetString() == GuardedWritePolicy.InternalApprovalAction)
+        {
+            lock (AddinLock)
+            {
+                if (!CapabilityMap.TryGetValue(GuardedWritePolicy.PreviewAction, out var provider) || provider != sender)
+                {
+                    Log("Rejected human approval message from a non-provider connection");
+                    return;
+                }
+            }
+            if (!root.TryGetProperty("data", out var approvalData))
+            {
+                Log("Rejected human approval message without binding data");
+                return;
+            }
+            var approvalId = approvalData.TryGetProperty("ApprovalId", out var approvalIdElement) ||
+                             approvalData.TryGetProperty("approvalId", out approvalIdElement)
+                ? approvalIdElement.GetString() : null;
+            if (string.IsNullOrWhiteSpace(approvalId))
+            {
+                Log("Rejected invalid human approval id");
+                return;
+            }
+            if (!PendingHumanApprovals.TryRemove(approvalId, out var pendingApproval) || pendingApproval.Addin != sender)
+            {
+                Log("Rejected unsolicited or replayed human approval message");
+                return;
+            }
+            HandleHumanApproval(pendingApproval.Binding);
+            Log($"Human approval accepted from addin '{sender.AddinName}' (approvalId={approvalId})");
+            return;
+        }
 
         if (string.IsNullOrEmpty(id) || !Pending.TryRemove(id, out var entry))
         {
@@ -288,15 +421,118 @@ class TcpBridge
         var error = root.TryGetProperty("error", out var e) && e.ValueKind == JsonValueKind.String
             ? e.GetString()
             : null;
+        var errorCode = root.TryGetProperty("errorCode", out var ec) && ec.ValueKind == JsonValueKind.String
+            ? ec.GetString()
+            : null;
         object? data = root.TryGetProperty("data", out var d) ? d.Clone() : null;
+
+        var resultAction = root.TryGetProperty("action", out var resultActionElement)
+            ? resultActionElement.GetString() : null;
+        if (error == null && data is JsonElement resultData &&
+            resultAction is "preview_ugdrillholes_result" or "prepare_rollback_ugdrillholes_result" &&
+            TryReadApprovedBinding(resultData, out var pendingBinding))
+        {
+            PendingHumanApprovals[pendingBinding.ApprovalId] = (sender, pendingBinding);
+        }
 
         var response = error == null
             ? McpResponse.Ok(id, data)
-            : McpResponse.Fail(id, error, "ADDIN_ERROR");
+            : McpResponse.Fail(id, error, errorCode ?? "ADDIN_ERROR");
 
         var json = JsonSerializer.Serialize(response);
         await entry.Requester.SendLineAsync(json);
         Log($"Relayed addin response for id={id}");
+    }
+
+    private static void HandleHumanApproval(WriteBinding binding)
+    {
+        _ = WriteTokens.MintFromHumanApproval(binding);
+    }
+
+    private static bool TryReadApprovedBinding(JsonElement resultData, out WriteBinding binding)
+    {
+        binding = null!;
+        if (!(resultData.TryGetProperty("Binding", out var bindingElement) ||
+              resultData.TryGetProperty("binding", out bindingElement)) ||
+            !(resultData.TryGetProperty("Manifest", out var manifest) ||
+              resultData.TryGetProperty("manifest", out manifest))) return false;
+        var parsed = bindingElement.Deserialize<WriteBinding>();
+        if (parsed == null) return false;
+        var computedHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(manifest.GetRawText())));
+        string? Field(string pascal, string camel) =>
+            manifest.TryGetProperty(pascal, out var value) || manifest.TryGetProperty(camel, out value)
+                ? value.GetString() : null;
+        if (!string.Equals(computedHash, parsed.ManifestHash, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(Field("Operation", "operation"), parsed.Operation, StringComparison.Ordinal) ||
+            !string.Equals(Field("DocumentGuid", "documentGuid"), parsed.DocumentGuid, StringComparison.Ordinal) ||
+            !string.Equals(Field("DrawingPath", "drawingPath"), parsed.DrawingPath, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(Field("TargetLayer", "targetLayer"), parsed.TargetLayer, StringComparison.Ordinal)) return false;
+        binding = parsed;
+        return true;
+    }
+
+    private static async Task ForwardAuthorizedWriteAsync(
+        ClientConnection requester, string requestId, string internalAction, WriteBinding binding)
+    {
+        ClientConnection? addin;
+        lock (AddinLock)
+        {
+            CapabilityMap.TryGetValue(
+                internalAction == GuardedWritePolicy.InternalCommitAction
+                    ? GuardedWritePolicy.PreviewAction
+                    : GuardedWritePolicy.PrepareRollbackAction,
+                out addin);
+        }
+        if (addin == null)
+        {
+            await requester.SendLineAsync(JsonSerializer.Serialize(
+                McpResponse.Fail(requestId, "No guarded-write addin is connected", "ADDIN_DISCONNECTED")));
+            return;
+        }
+
+        Pending[requestId] = (requester, addin);
+        var message = JsonSerializer.Serialize(new
+        {
+            id = requestId,
+            action = internalAction,
+            @params = new
+            {
+                binding.ApprovalId,
+                binding.Operation,
+                binding.DocumentGuid,
+                binding.DrawingPath,
+                binding.TargetLayer,
+                binding.ManifestHash,
+                binding.SourceFingerprint,
+                binding.RecordId
+            }
+        });
+        await addin.SendLineAsync(message);
+        StartForwardTimeout(requestId, internalAction);
+    }
+
+    private static string? GetStringParam(McpCommand command, string name)
+    {
+        if (command.Params == null || !command.Params.TryGetValue(name, out var value)) return null;
+        return value is JsonElement element && element.ValueKind == JsonValueKind.String
+            ? element.GetString()
+            : value as string;
+    }
+
+    private static void StartForwardTimeout(string requestId, string action)
+    {
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(ForwardTimeout);
+            if (Pending.TryRemove(requestId, out var entry))
+            {
+                var timeout = McpResponse.Fail(requestId,
+                    $"Deswik did not respond to '{action}' within {ForwardTimeout.TotalSeconds}s",
+                    "ADDIN_TIMEOUT");
+                try { await entry.Requester.SendLineAsync(JsonSerializer.Serialize(timeout)); }
+                catch { }
+            }
+        });
     }
 
     private static void OnClientGone(ClientConnection conn)
@@ -305,6 +541,7 @@ class TcpBridge
         {
             if (conn.IsAddin)
             {
+                ConnectedAddins.Remove(conn);
                 var caps = CapabilityMap.Where(kv => kv.Value == conn)
                                         .Select(kv => kv.Key).ToList();
                 foreach (var cap in caps) CapabilityMap.Remove(cap);
@@ -330,6 +567,69 @@ class TcpBridge
                 Pending.TryRemove(id, out _);
             }
         }
+        foreach (var approval in PendingHumanApprovals.Where(pair => pair.Value.Addin == conn).Select(pair => pair.Key))
+            PendingHumanApprovals.TryRemove(approval, out _);
+    }
+}
+
+/// <summary>Pure routing decisions shared by the bridge and its tests.</summary>
+public static class BridgeResponsePolicy
+{
+    private const string HttpMessage =
+        "Deswik Workflow Bridge is not a website. " +
+        "Use the newline-delimited JSON TCP client in deswik-mcp/tools/deswik.ps1.\r\n";
+
+    public static bool IsHttpRequestLine(string line)
+    {
+        return line.StartsWith("GET ", StringComparison.Ordinal) ||
+               line.StartsWith("POST ", StringComparison.Ordinal) ||
+               line.StartsWith("HEAD ", StringComparison.Ordinal) ||
+               line.StartsWith("PUT ", StringComparison.Ordinal) ||
+               line.StartsWith("DELETE ", StringComparison.Ordinal) ||
+               line.StartsWith("OPTIONS ", StringComparison.Ordinal) ||
+               line.StartsWith("PATCH ", StringComparison.Ordinal);
+    }
+
+    public static string HttpRejection()
+    {
+        var contentLength = Encoding.UTF8.GetByteCount(HttpMessage);
+        return "HTTP/1.1 400 Bad Request\r\n" +
+               "Content-Type: text/plain; charset=utf-8\r\n" +
+               $"Content-Length: {contentLength}\r\n" +
+               "Cache-Control: no-store\r\n" +
+               "Connection: close\r\n\r\n" +
+               HttpMessage;
+    }
+
+    public static McpResponse AsDemo(McpResponse response)
+    {
+        response.Mode = McpResponseMode.Demo;
+        return response;
+    }
+
+    public static McpResponse? ValidateRequestMode(McpCommand command)
+    {
+        return McpResponseMode.IsValidRequest(command.Mode)
+            ? null
+            : McpResponse.Fail(
+                command.Id,
+                $"Unknown response mode: {command.Mode}",
+                "INVALID_MODE");
+    }
+
+    public static McpResponse NoProvider(McpCommand command, bool hasConnectedAddin)
+    {
+        return hasConnectedAddin
+            ? McpResponse.Fail(
+                command.Id,
+                $"No connected addin registered action '{command.Action}'",
+                "UNSUPPORTED_ACTION",
+                McpResponseMode.Unsupported)
+            : McpResponse.Fail(
+                command.Id,
+                "No Deswik addin is connected",
+                "ADDIN_DISCONNECTED",
+                McpResponseMode.Disconnected);
     }
 }
 
@@ -541,7 +841,7 @@ public class DemoCommandHandler
         return Task.FromResult(command.Action.ToLowerInvariant() switch
         {
             // Basic commands
-            "ping" => McpResponse.Ok(command.Id, new { message = "pong", timestamp = DateTime.UtcNow, mode = "demo" }),
+            "ping" => McpResponse.Ok(command.Id, new { message = "pong", timestamp = DateTime.UtcNow }),
             "get_schedule_info" => McpResponse.Ok(command.Id, _schedulerService.GetScheduleInfo()),
             "get_tasks" => McpResponse.Ok(command.Id, _schedulerService.GetTasks()),
             "get_resources" => McpResponse.Ok(command.Id, _schedulerService.GetResources()),

@@ -5,6 +5,7 @@
 #   Invoke-Deswik get_tasks @{ limit = 5 }
 #   Invoke-Deswik get_task_fields @{ taskId = "815_183a681b4181"; fields = @("Name","Tonnes") }
 #   Invoke-Deswik get_cad_layers | Where-Object entityCount -gt 0
+#   Invoke-Deswik map.inspect @{ path = "W:\AI_Deswik\tests\archive_ddf\SDK - Stope Design Layout.ddf" }
 
 function Invoke-Deswik {
     [CmdletBinding()]
@@ -13,7 +14,8 @@ function Invoke-Deswik {
         [Parameter(Position = 1)] [hashtable] $Params = @{},
         [string] $BridgeHost = "127.0.0.1",
         [int] $Port = 9595,
-        [int] $TimeoutSec = 60
+        [int] $TimeoutSec = 60,
+        [ValidateSet("live", "demo")] [string] $Mode = "live"
     )
 
     $client = [System.Net.Sockets.TcpClient]::new()
@@ -25,7 +27,7 @@ function Invoke-Deswik {
         $writer.NewLine = "`n"
         $reader = [System.IO.StreamReader]::new($stream, [System.Text.Encoding]::UTF8)
 
-        $cmd = @{ id = [guid]::NewGuid().ToString(); action = $Action; params = $Params } |
+        $cmd = @{ id = [guid]::NewGuid().ToString(); action = $Action; params = $Params; mode = $Mode } |
             ConvertTo-Json -Depth 10 -Compress
         $writer.WriteLine($cmd)
         $writer.Flush()

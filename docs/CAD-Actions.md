@@ -1,6 +1,6 @@
 # CAD Actions
 
-All 16 actions registered by `Deswik.Addin`. Parameters marked `?` are
+CAD actions registered by `Deswik.Addin`. Parameters marked `?` are
 optional (default in parentheses). Geometry is in world coordinates; entity
 `handle`s come from `get_cad_selection` / `get_cad_elements`.
 
@@ -19,16 +19,21 @@ optional (default in parentheses). Geometry is in world coordinates; entity
 | `get_cad_blasthole_details` | `handle` | BlastHole entity fields |
 | `get_cad_ugdrillhole_details` | `handle` | UGDrillHole entity fields |
 
-## Writing / drawing
+## Guarded writing
 
-| Action | Params |
-|---|---|
-| `create_cad_layer` | `name` — backslash path (`A\B\C`) creates the nested tree |
-| `draw_cad_text` | `layer`, `text`, `x?`, `y?`, `z?`, `height?` (5) |
-| `draw_cad_polylines` | `layer`, `polylines: [{ points: [[x,y,z]…], closed?, color? [r,g,b], label? }]`, `texts?: [{ text, x, y, z, height? (0.5), color? }]` |
-| `slice_cad_polyface` | `handle`, `origin: [x,y,z]`, `normal: [x,y,z]` — plane section of a solid |
-| `draw_cad_blastholes` | `layer`, `holes: [{ id, collar/toe geometry, diameter? (0.076), burden?, spacing? }]` |
-| `draw_cad_ugdrillholes` | `layer`, `ringId`, `holes: [{ pivotId, holeId?, geometry, diameter? (0.089), diameterString?, orderIndex?, explosive?, chargeCollar? (1.0) }]` |
+| Action | Params | Behaviour |
+|---|---|---|
+| `preview_ugdrillholes` | `holes: [{ pivot, collar, toe, pivotId?, holeId?, diameter? }]` | Draws owned polylines on `_MCP_PREVIEW`, returns a manifest and opens the default-No approval modal. Never returns a token. |
+| `get_write_approval` | `approvalId` | Returns a bridge-process token only after the Deswik modal was accepted. |
+| `commit_ugdrillholes` | `token` | Consumes the token before the attempt and creates native `UGDrillHole` entities on `RINGDESIGN\_MCP_APPROVED\HOLES`. |
+| `prepare_rollback_ugdrillholes` | `commitId` | Shows a default-No rollback manifest and returns its approval ID. |
+| `rollback_ugdrillholes` | `token` | Consumes a separate rollback token and deletes only handles in that commit record. |
+
+The six former direct writers remain recognizable for compatibility but fail
+with `forbidden_unfenced`: `create_cad_layer`, `draw_cad_text`,
+`draw_cad_polylines`, `slice_cad_polyface`, `draw_cad_blastholes`, and
+`draw_cad_ugdrillholes`. The only exception is `create_cad_layer` when `name`
+is exactly `_MCP_PREVIEW`.
 
 See `CadReader.cs` for the exact hole-spec fields — the two drill-hole actions
 create native Deswik.UGDB-compatible entities, which need `Hole` (ID) and
@@ -36,8 +41,9 @@ create native Deswik.UGDB-compatible entities, which need `Hole` (ID) and
 
 ## Notes
 
-- Drawing actions run on the CAD UI thread (marshalled internally).
-- `draw_cad_ugdrillholes` layer convention for UGDB pickup:
-  `RINGDESIGN\<project>\<ring>\HOLES`.
+- Preview, commit, and rollback run on the CAD UI thread.
+- Preview refuses `preview_layer_dirty` when `_MCP_PREVIEW` contains a handle
+  outside the current in-process preview record.
+- Tokens expire after 10 minutes, are single-use, and die with the bridge.
 - Dip sign: `UGDrillHole.Dip` is **positive-up** from horizontal;
   `BlastHole` uses positive-down. Negate when converting between them.

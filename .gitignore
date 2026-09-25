@@ -12,9 +12,11 @@ deswik-mcp/src/*
 !deswik-mcp/src/Deswik.Addin/
 !deswik-mcp/src/Deswik.Bridge/
 !deswik-mcp/src/Deswik.Bridge.Standalone/
+!deswik-mcp/src/Deswik.Bridge.Tests/
 !deswik-mcp/tools/
 deswik-mcp/tools/*
 !deswik-mcp/tools/deswik.ps1
+!deswik-mcp/tools/Test-AddinPreflight.ps1
 
 # build output
 **/bin/
