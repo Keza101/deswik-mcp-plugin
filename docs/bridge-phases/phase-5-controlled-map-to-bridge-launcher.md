@@ -8,9 +8,11 @@ blocked-on-human — choose the launcher boundary before implementation.
 
 ## Changed files
 
-`W:\deswik-mcp-plugin\docs\bridge-phases\phase-4-guarded-cad-writes.md` — records the user's 4/4 Phase 4 acceptance report.
+`<PLUGIN_ROOT>` below denotes the current plugin repository folder, independent of its drive letter.
 
-`W:\deswik-mcp-plugin\docs\bridge-phases\phase-5-controlled-map-to-bridge-launcher.md` — records the Phase 5 design blocker and the decision required to proceed.
+`<PLUGIN_ROOT>\docs\bridge-phases\phase-4-guarded-cad-writes.md` — records the user's 4/4 Phase 4 acceptance report.
+
+`<PLUGIN_ROOT>\docs\bridge-phases\phase-5-controlled-map-to-bridge-launcher.md` — records the Phase 5 design blocker and the decision required to proceed.
 
 ## Behaviour
 

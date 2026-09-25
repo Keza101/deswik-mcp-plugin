@@ -15,8 +15,12 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <DeswikDir Condition="'$(DeswikDir)' == ''">D:\Program Files\Deswik\Deswik.Suite 2025.2</DeswikDir>
+    <DeswikDir Condition="'$(DeswikDir)' == ''">$(DESWIK_DIR)</DeswikDir>
   </PropertyGroup>
+
+  <Target Name="RequireDeswikDir" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(DeswikDir)' == ''" Text="Set DESWIK_DIR or pass -p:DeswikDir to your Deswik.Suite installation folder." />
+  </Target>
 
   <ItemGroup>
     <Reference Include="Deswik.Graphics">

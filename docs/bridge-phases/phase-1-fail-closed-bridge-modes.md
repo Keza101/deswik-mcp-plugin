@@ -8,21 +8,23 @@ complete
 
 ## Changed files
 
-`W:\deswik-mcp-plugin\deswik-mcp\src\Deswik.Bridge\models\McpCommand.cs` — adds the request-mode selector and mandatory response mode.
+Historical paths below use `<PLUGIN_ROOT>` and `<SDK_ROOT>` in place of machine-specific drive paths; replace them with the corresponding folders before rerunning an old command.
 
-`W:\deswik-mcp-plugin\deswik-mcp\src\Deswik.Bridge.Standalone\TcpBridge.cs` — removes implicit demo fallback and separates live, demo, unsupported, and disconnected routing.
+`<PLUGIN_ROOT>\deswik-mcp\src\Deswik.Bridge\models\McpCommand.cs` — adds the request-mode selector and mandatory response mode.
 
-`W:\deswik-mcp-plugin\deswik-mcp\src\Deswik.Bridge.Tests\Deswik.Bridge.Tests.csproj` — adds the offline net8.0 bridge test project.
+`<PLUGIN_ROOT>\deswik-mcp\src\Deswik.Bridge.Standalone\TcpBridge.cs` — removes implicit demo fallback and separates live, demo, unsupported, and disconnected routing.
 
-`W:\deswik-mcp-plugin\deswik-mcp\src\Deswik.Bridge.Tests\Program.cs` — tests every phase-1 routing state and refusal case.
+`<PLUGIN_ROOT>\deswik-mcp\src\Deswik.Bridge.Tests\Deswik.Bridge.Tests.csproj` — adds the offline net8.0 bridge test project.
 
-`W:\deswik-mcp-plugin\deswik-mcp\tools\deswik.ps1` — exposes explicit live/demo request selection in the supported client.
+`<PLUGIN_ROOT>\deswik-mcp\src\Deswik.Bridge.Tests\Program.cs` — tests every phase-1 routing state and refusal case.
 
-`W:\deswik-mcp-plugin\docs\Wire-Protocol.md` — documents request and response mode semantics.
+`<PLUGIN_ROOT>\deswik-mcp\tools\deswik.ps1` — exposes explicit live/demo request selection in the supported client.
 
-`W:\deswik-mcp-plugin\README.md` — documents fail-closed responses and the test command while preserving the existing local Deswik path edit.
+`<PLUGIN_ROOT>\docs\Wire-Protocol.md` — documents request and response mode semantics.
 
-`W:\deswik-mcp-plugin\docs\bridge-phases\phase-1-fail-closed-bridge-modes.md` — records phase evidence and human acceptance steps (relocated after acceptance).
+`<PLUGIN_ROOT>\README.md` — documents fail-closed responses and the test command while preserving the existing local Deswik path edit.
+
+`<PLUGIN_ROOT>\docs\bridge-phases\phase-1-fail-closed-bridge-modes.md` — records phase evidence and human acceptance steps (relocated after acceptance).
 
 ## Behaviour
 
@@ -45,7 +47,7 @@ Browser request to raw TCP port: repeated JSON parse errors for every HTTP heade
 ## Commands run
 
 ```powershell
-python W:\AI_Deswik\tests\test_roundtrip.py
+python <SDK_ROOT>\tests\test_roundtrip.py
 ```
 
 ```text
@@ -57,7 +59,7 @@ ALL TESTS PASSED
 ```
 
 ```powershell
-python W:\AI_Deswik\tests\test_commands.py
+python <SDK_ROOT>\tests\test_commands.py
 ```
 
 ```text
@@ -68,7 +70,7 @@ ALL TESTS PASSED
 ```
 
 ```powershell
-& 'C:\Users\kevst\.dotnet-sdk-8\dotnet.exe' build 'W:\deswik-mcp-plugin\deswik-mcp\src\Deswik.Addin\Deswik.Addin.csproj' -c Release -p:DeswikDir='C:\Program Files\Deswik\Deswik.Suite 2025.2' -clp:'ErrorsOnly;Summary'
+& 'C:\Users\kevst\.dotnet-sdk-8\dotnet.exe' build '<PLUGIN_ROOT>\deswik-mcp\src\Deswik.Addin\Deswik.Addin.csproj' -c Release -p:DeswikDir='C:\Program Files\Deswik\Deswik.Suite 2025.2' -clp:'ErrorsOnly;Summary'
 ```
 
 ```text
@@ -80,7 +82,7 @@ Time Elapsed 00:00:03.95
 ```
 
 ```powershell
-& 'C:\Users\kevst\.dotnet-sdk-8\dotnet.exe' build 'W:\deswik-mcp-plugin\deswik-mcp\src\Deswik.Bridge.Standalone' -c Release -p:DeswikDir='C:\Program Files\Deswik\Deswik.Suite 2025.2' -clp:'ErrorsOnly;Summary'
+& 'C:\Users\kevst\.dotnet-sdk-8\dotnet.exe' build '<PLUGIN_ROOT>\deswik-mcp\src\Deswik.Bridge.Standalone' -c Release -p:DeswikDir='C:\Program Files\Deswik\Deswik.Suite 2025.2' -clp:'ErrorsOnly;Summary'
 ```
 
 ```text
@@ -92,11 +94,11 @@ Time Elapsed 00:00:02.52
 ```
 
 ```powershell
-& 'C:\Users\kevst\.dotnet-sdk-8\dotnet.exe' test 'W:\deswik-mcp-plugin\deswik-mcp\src\Deswik.Bridge.Tests\Deswik.Bridge.Tests.csproj' -c Release --no-restore -p:DeswikDir='C:\Program Files\Deswik\Deswik.Suite 2025.2' -v:minimal
+& 'C:\Users\kevst\.dotnet-sdk-8\dotnet.exe' test '<PLUGIN_ROOT>\deswik-mcp\src\Deswik.Bridge.Tests\Deswik.Bridge.Tests.csproj' -c Release --no-restore -p:DeswikDir='C:\Program Files\Deswik\Deswik.Suite 2025.2' -v:minimal
 ```
 
 ```text
-Deswik.Bridge.Tests -> W:\deswik-mcp-plugin\deswik-mcp\src\Deswik.Bridge.Tests\bin\Release\net8.0\Deswik.Bridge.Tests.dll
+Deswik.Bridge.Tests -> <PLUGIN_ROOT>\deswik-mcp\src\Deswik.Bridge.Tests\bin\Release\net8.0\Deswik.Bridge.Tests.dll
 PASS response envelope always includes mode
 PASS disconnected live request fails without data
 PASS connected unregistered action is unsupported
@@ -108,7 +110,7 @@ ALL TESTS PASSED
 ```
 
 ```powershell
-git -C W:\AI_Deswik check-ignore -v docs/bridge-phases/phase-1-fail-closed-bridge-modes.md
+git -C <SDK_ROOT> check-ignore -v docs/bridge-phases/phase-1-fail-closed-bridge-modes.md
 ```
 
 ```text

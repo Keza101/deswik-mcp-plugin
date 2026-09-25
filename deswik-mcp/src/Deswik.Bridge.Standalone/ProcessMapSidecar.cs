@@ -7,8 +7,20 @@ namespace Deswik.Bridge.Standalone;
 
 public sealed class ProcessMapSidecar
 {
-    public const string PythonExe = @"C:\Python314\python.exe";
-    public const string EntryPoint = @"W:\deswik-mcp-plugin\deswik_pm\sidecar.py";
+    public static string PythonExe => Environment.GetEnvironmentVariable("DESWIK_MCP_PYTHON") ?? "";
+    public static string EntryPoint
+    {
+        get
+        {
+            for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory != null; directory = directory.Parent)
+            {
+                var candidate = Path.Combine(directory.FullName, "deswik_pm", "sidecar.py");
+                if (File.Exists(candidate)) return candidate;
+            }
+
+            return Path.Combine(AppContext.BaseDirectory, "deswik_pm", "sidecar.py");
+        }
+    }
     public const string EntryPointSha256 = "B334E3A6B71D265385807F2CBCB3003226BB732789AB811E125ABF8428CA9960";
 
     private static readonly HashSet<string> Actions = new(StringComparer.Ordinal)
@@ -33,7 +45,7 @@ public sealed class ProcessMapSidecar
         if (!CanHandle(command.Action))
             return McpResponse.Fail(command.Id, $"Unsupported sidecar action: {command.Action}", "UNSUPPORTED_ACTION");
         if (!Path.IsPathFullyQualified(PythonExe) || !File.Exists(PythonExe))
-            return McpResponse.Fail(command.Id, $"Pinned Python interpreter not found: {PythonExe}", "SIDECAR_UNAVAILABLE");
+            return McpResponse.Fail(command.Id, "Set DESWIK_MCP_PYTHON to the absolute path of python.exe", "SIDECAR_UNAVAILABLE");
         if (!VerifyEntryPoint(EntryPoint, EntryPointSha256))
             return McpResponse.Fail(command.Id, "Process Map sidecar integrity check failed", "SIDECAR_INTEGRITY");
 

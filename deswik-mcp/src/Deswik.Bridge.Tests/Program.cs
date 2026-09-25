@@ -152,7 +152,8 @@ static Task TestSidecarIntegrity()
 
 static async Task TestSidecarInspect()
 {
-    var sample = @"W:\deswik-mcp-plugin\tests\archive_ddf\SDK - Stope Design Layout.ddf";
+    var projectRoot = Directory.GetParent(Path.GetDirectoryName(ProcessMapSidecar.EntryPoint)!)!.FullName;
+    var sample = Path.Combine(projectRoot, "tests", "archive_ddf", "SDK - Stope Design Layout.ddf");
     var command = new McpCommand
     {
         Id = "sidecar-inspect",

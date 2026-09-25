@@ -30,30 +30,35 @@ Deswik.CAD ── Deswik.Addin (this plugin, loaded by Plugin Manager)
 - `deswik-mcp/tools/deswik.ps1` — PowerShell client
   (`. deswik.ps1; dsw get_layers`).
 - `deswik_pm` — local copy of the Process Map SDK used by the bridge sidecar.
-  The SDK also remains in `W:\AI_Deswik`; keep both copies in sync when changing it.
+  The SDK may also exist in a separate `AI_Deswik` project; keep shared files
+  in sync when changing them.
 - `docs/bridge-phases` — bridge gate reports and operator acceptance steps.
 - `docs/workflow-bridge-status.html` — interactive phase and decision board.
 
 ## Build
 
 ```powershell
-# The csproj default is D:\Program Files\Deswik\Deswik.Suite 2025.2.
-# Override it with -p:DeswikDir if your install is elsewhere, e.g. on C:.
-dotnet build deswik-mcp/src/Deswik.Addin/Deswik.Addin.csproj -c Release `
-  -p:DeswikDir="C:\Program Files\Deswik\Deswik.Suite 2025.2"
+# Open PowerShell in this repository folder. Set your actual Deswik install path.
+$deswikDir = '<your Deswik.Suite installation folder>'
+$env:DESWIK_DIR = $deswikDir
+$env:DESWIK_MCP_PYTHON = (Get-Command python).Source
+dotnet build deswik-mcp/src/Deswik.Addin/Deswik.Addin.csproj -c Release
 dotnet build deswik-mcp/src/Deswik.Bridge.Standalone -c Release
-dotnet test deswik-mcp/src/Deswik.Bridge.Tests -c Release `
-  -p:DeswikDir="C:\Program Files\Deswik\Deswik.Suite 2025.2"
+dotnet test deswik-mcp/src/Deswik.Bridge.Tests -c Release
 ```
 
 Process Map actions are `map.inspect`, `map.validate`, `map.generate`,
 `map.install`, and `map.inventory`. They use the pinned
-`W:\deswik-mcp-plugin\deswik_pm\sidecar.py` entry point and return SHA256 provenance
+`deswik_pm/sidecar.py` entry point and return SHA256 provenance
 for every file read or written.
 
 The bridge's pinned sidecar SHA256 in `ProcessMapSidecar.cs` must match this
 local copy after any SDK update. Local acceptance packages stay in the ignored
 `workflow-packages` folder; the portable test fixture is in `tests/archive_ddf`.
+The bridge locates the sidecar by walking up from its executable to this
+repository folder. Set `DESWIK_MCP_PYTHON` to the full path of `python.exe` in
+the PowerShell window **before** starting the bridge; the bridge refuses a
+missing or relative interpreter path.
 
 CAD production writes use the guarded flow documented in
 `docs/CAD-Actions.md`: preview on `_MCP_PREVIEW`, a default-No approval modal
@@ -62,16 +67,23 @@ writer actions fail with `forbidden_unfenced`.
 
 ## Run
 
-1. Start the bridge: `dotnet run --project deswik-mcp/src/Deswik.Bridge.Standalone`.
+1. Open PowerShell in this repository folder and start the built bridge:
+
+   ```powershell
+   $env:DESWIK_MCP_PYTHON = (Get-Command python).Source
+   & '.\deswik-mcp\src\Deswik.Bridge.Standalone\bin\Release\net8.0\Deswik.Bridge.Standalone.exe'
+   ```
+
+   Keep that window open.
 2. In Deswik.CAD: Tools → Plugin Manager → Add → select the built
    `Deswik.Addin.dll` → Load. A dock panel shows the bridge connection state.
 3. Talk to it:
 
 ```powershell
 . deswik-mcp/tools/deswik.ps1
-dsw hello
-dsw get_layers
-dsw get_selection
+dsw get_cad_document
+dsw get_cad_layers
+dsw get_cad_selection
 ```
 
 Port `9595` is a raw JSON-over-TCP endpoint, not a website. Do not open it in

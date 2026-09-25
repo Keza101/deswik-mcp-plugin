@@ -1,11 +1,15 @@
 [CmdletBinding()]
 param(
-    [string] $DeswikDir = 'C:\Program Files\Deswik\Deswik.Suite 2025.2',
+    [string] $DeswikDir = $env:DESWIK_DIR,
     [string] $AddinDir = (Join-Path $PSScriptRoot '..\src\Deswik.Addin\bin\Release\net8.0-windows')
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+if ([string]::IsNullOrWhiteSpace($DeswikDir)) {
+    throw 'Set DESWIK_DIR or pass -DeswikDir with your Deswik.Suite installation folder.'
+}
 
 if (Get-Process Deswik.CAD -ErrorAction SilentlyContinue) {
     throw 'Close every Deswik.CAD process before preflight so the DLL and registration can be verified.'

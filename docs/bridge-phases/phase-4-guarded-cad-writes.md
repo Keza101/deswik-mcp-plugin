@@ -10,19 +10,21 @@ Complete. The user reported all four live Deswik.CAD acceptance checks passed on
 
 ## Changed files
 
-- `W:\deswik-mcp-plugin\deswik-mcp\src\Deswik.Bridge.Standalone\GuardedWritePolicy.cs`
-- `W:\deswik-mcp-plugin\deswik-mcp\src\Deswik.Bridge.Standalone\AssemblyInfo.cs`
-- `W:\deswik-mcp-plugin\deswik-mcp\src\Deswik.Bridge.Standalone\TcpBridge.cs`
-- `W:\deswik-mcp-plugin\deswik-mcp\src\Deswik.Bridge.Tests\Program.cs`
-- `W:\deswik-mcp-plugin\deswik-mcp\src\Deswik.Addin\BridgeClient.cs`
-- `W:\deswik-mcp-plugin\deswik-mcp\src\Deswik.Addin\CadReader.cs`
-- `W:\deswik-mcp-plugin\deswik-mcp\src\Deswik.Addin\Deswik.Addin.csproj`
-- `W:\deswik-mcp-plugin\deswik-mcp\src\Deswik.Addin\DeswikMcpAddin.cs`
-- `W:\deswik-mcp-plugin\deswik-mcp\src\Deswik.Addin\GuardedWriteCoordinator.cs`
-- `W:\deswik-mcp-plugin\deswik-mcp\tools\Test-AddinPreflight.ps1`
-- `W:\deswik-mcp-plugin\docs\CAD-Actions.md`
-- `W:\deswik-mcp-plugin\docs\Wire-Protocol.md`
-- `W:\deswik-mcp-plugin\README.md`
+Historical file paths below use `<PLUGIN_ROOT>` in place of the earlier machine's drive path. The repeat-run commands under **Human acceptance** resolve from the current plugin folder.
+
+- `<PLUGIN_ROOT>\deswik-mcp\src\Deswik.Bridge.Standalone\GuardedWritePolicy.cs`
+- `<PLUGIN_ROOT>\deswik-mcp\src\Deswik.Bridge.Standalone\AssemblyInfo.cs`
+- `<PLUGIN_ROOT>\deswik-mcp\src\Deswik.Bridge.Standalone\TcpBridge.cs`
+- `<PLUGIN_ROOT>\deswik-mcp\src\Deswik.Bridge.Tests\Program.cs`
+- `<PLUGIN_ROOT>\deswik-mcp\src\Deswik.Addin\BridgeClient.cs`
+- `<PLUGIN_ROOT>\deswik-mcp\src\Deswik.Addin\CadReader.cs`
+- `<PLUGIN_ROOT>\deswik-mcp\src\Deswik.Addin\Deswik.Addin.csproj`
+- `<PLUGIN_ROOT>\deswik-mcp\src\Deswik.Addin\DeswikMcpAddin.cs`
+- `<PLUGIN_ROOT>\deswik-mcp\src\Deswik.Addin\GuardedWriteCoordinator.cs`
+- `<PLUGIN_ROOT>\deswik-mcp\tools\Test-AddinPreflight.ps1`
+- `<PLUGIN_ROOT>\docs\CAD-Actions.md`
+- `<PLUGIN_ROOT>\docs\Wire-Protocol.md`
+- `<PLUGIN_ROOT>\README.md`
 
 ## Behaviour
 
@@ -41,17 +43,17 @@ Complete. The user reported all four live Deswik.CAD acceptance checks passed on
 python tests/test_roundtrip.py
 python tests/test_commands.py
 
-& 'C:\Users\kevst\.dotnet-sdk-8\dotnet.exe' build `
+dotnet build `
   'deswik-mcp\src\Deswik.Addin\Deswik.Addin.csproj' -c Release `
-  -p:DeswikDir='C:\Program Files\Deswik\Deswik.Suite 2025.2'
+  -p:DeswikDir="$env:DESWIK_DIR"
 
-& 'C:\Users\kevst\.dotnet-sdk-8\dotnet.exe' build `
+dotnet build `
   'deswik-mcp\src\Deswik.Bridge.Standalone\Deswik.Bridge.Standalone.csproj' -c Release `
-  -p:DeswikDir='C:\Program Files\Deswik\Deswik.Suite 2025.2'
+  -p:DeswikDir="$env:DESWIK_DIR"
 
-& 'C:\Users\kevst\.dotnet-sdk-8\dotnet.exe' test `
+dotnet test `
   'deswik-mcp\src\Deswik.Bridge.Tests\Deswik.Bridge.Tests.csproj' -c Release `
-  -p:DeswikDir='C:\Program Files\Deswik\Deswik.Suite 2025.2'
+  -p:DeswikDir="$env:DESWIK_DIR"
 ```
 
 Results: both Python suites passed; 15 bridge tests passed; Addin Release build passed with 11 dependency-resolution warnings and 0 errors; Standalone Release build passed with 8 dependency-resolution warnings and 0 errors. A live loopback abuse check returned `forbidden_unfenced` for a legacy writer and internal commit action, and `approval_unavailable` for an unapproved ID.
@@ -77,18 +79,21 @@ Subsequent live check: `Test File.duf` was open and saved, but the add-in still 
 
 ## Human acceptance
 
-For a repeat run, confirm the updated Release DLL at `W:\deswik-mcp-plugin\deswik-mcp\src\Deswik.Addin\bin\Release\net8.0-windows\Deswik.Addin.dll` is loaded after a CAD restart. A green build or bridge connection alone is not acceptance. Work in a **saved, disposable drawing**, never a production drawing. `W:\deswik-mcp-plugin\docs\Test File.duf` is the candidate test file. A `drawing_unsaved` error means save the intended drawing in CAD before continuing.
+For a repeat run, confirm the updated Release DLL at `deswik-mcp\src\Deswik.Addin\bin\Release\net8.0-windows\Deswik.Addin.dll` is loaded after a CAD restart. A green build or bridge connection alone is not acceptance. Work in a **saved, disposable drawing**, never a production drawing. An earlier local test used `docs\Test File.duf`, which is not part of the Git project; use your own disposable file if it is absent. A `drawing_unsaved` error means save the intended drawing in CAD before continuing.
 
-Open two PowerShell windows. In window 1, run the bridge below and leave that window open. If it already says `TCP Server started on port 9595`, leave the existing bridge running instead of starting another copy.
+Open two PowerShell windows **in the plugin repository folder**. In window 1, run the bridge below and leave that window open. If it already says `TCP Server started on port 9595`, leave the existing bridge running instead of starting another copy. Set `$env:DESWIK_MCP_PYTHON` to the full path of your `python.exe` before starting the bridge.
 
 ```powershell
-& 'W:\deswik-mcp-plugin\deswik-mcp\src\Deswik.Bridge.Standalone\bin\Release\net8.0\Deswik.Bridge.Standalone.exe'
+$pluginRoot = (Get-Location).Path
+$env:DESWIK_MCP_PYTHON = (Get-Command python).Source
+& (Join-Path $pluginRoot 'deswik-mcp\src\Deswik.Bridge.Standalone\bin\Release\net8.0\Deswik.Bridge.Standalone.exe')
 ```
 
 In window 2, load the `dsw` command:
 
 ```powershell
-. 'W:\deswik-mcp-plugin\deswik-mcp\tools\deswik.ps1'
+$pluginRoot = (Get-Location).Path
+. (Join-Path $pluginRoot 'deswik-mcp\tools\deswik.ps1')
 ```
 
 Copy only the lines **inside** code blocks into PowerShell; do not paste the Markdown fence lines. A red `dsw` error means that command failed. Stop that check instead of using an empty or old `$preview`, `$approval`, or `$commit` variable.

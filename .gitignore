@@ -12,6 +12,8 @@ docs/Backup/
 !deswik_pm/
 !tests/
 tests/*
+!tests/test_roundtrip.py
+!tests/test_commands.py
 !tests/archive_ddf/
 tests/archive_ddf/*
 !tests/archive_ddf/SDK - Stope Design Layout.ddf
