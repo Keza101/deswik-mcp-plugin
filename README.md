@@ -32,6 +32,7 @@ Deswik.CAD ── Deswik.Addin (this plugin, loaded by Plugin Manager)
 - `deswik_pm` — local copy of the Process Map SDK used by the bridge sidecar.
   The SDK also remains in `W:\AI_Deswik`; keep both copies in sync when changing it.
 - `docs/bridge-phases` — bridge gate reports and operator acceptance steps.
+- `docs/workflow-bridge-status.html` — interactive phase and decision board.
 
 ## Build
 

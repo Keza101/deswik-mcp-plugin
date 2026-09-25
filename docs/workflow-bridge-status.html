@@ -1,0 +1,129 @@
+<div id="workflow-bridge-board">
+  <style>
+    #workflow-bridge-board { display: grid; gap: 16px; color: var(--foreground); }
+    #workflow-bridge-board .board-head { display: grid; gap: 8px; }
+    #workflow-bridge-board .board-head h1 { margin: 0; }
+    #workflow-bridge-board .status-built { background: color-mix(in srgb, var(--green) 16%, transparent); color: var(--green); }
+    #workflow-bridge-board .status-pending { background: color-mix(in srgb, var(--yellow) 18%, transparent); color: var(--yellow); }
+    #workflow-bridge-board .status-blocked { background: color-mix(in srgb, var(--red, #d9534f) 18%, transparent); color: var(--red, #d9534f); }
+    #workflow-bridge-board .status-queued { background: var(--muted); color: var(--muted-foreground); }
+    #workflow-bridge-board .status-decision { background: color-mix(in srgb, var(--blue) 16%, transparent); color: var(--blue); }
+    #workflow-bridge-board .phase-title { font-weight: 500; }
+    #workflow-bridge-board .phase-detail { display: block; margin-top: 3px; color: var(--muted-foreground); }
+    #workflow-bridge-board .decision-list { display: grid; gap: 0; }
+    #workflow-bridge-board .decision-row { display: grid; grid-template-columns: minmax(150px, .8fr) minmax(260px, 1.5fr) auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    #workflow-bridge-board .decision-row:last-child { border-bottom: 0; }
+    #workflow-bridge-board .filter-summary { color: var(--muted-foreground); }
+    @media (max-width: 620px) {
+      #workflow-bridge-board .decision-row { grid-template-columns: 1fr; gap: 4px; }
+    }
+  </style>
+
+  <div class="board-head">
+    <h1>Workflow Bridge delivery</h1>
+    <div class="text-muted">Phases 1–4 are accepted. Phase 5 is under design review: an editable ExecuteFile path can bypass the bridge before it checks the helper. Phases 6–8 are queued.</div>
+  </div>
+
+  <div class="viz-grid">
+    <div class="card viz-stat">
+      <div class="text-muted">Build progress</div>
+      <div class="viz-stat-value tabular-nums">4 / 8</div>
+      <div>Phase builds complete</div>
+    </div>
+    <div class="card viz-stat">
+      <div class="text-muted">Acceptance</div>
+      <div class="viz-stat-value tabular-nums">4</div>
+      <div>of 4 Phase 4 checks accepted</div>
+    </div>
+    <div class="card viz-stat">
+      <div class="text-muted">Queue</div>
+      <div class="viz-stat-value tabular-nums">3</div>
+      <div>Phases not started</div>
+    </div>
+  </div>
+
+  <div class="progress" role="progressbar" aria-label="Implementation phase progress" aria-valuenow="4" aria-valuemin="0" aria-valuemax="8">
+    <div class="progress-bar" style="width:50%"></div>
+  </div>
+
+  <div class="nav nav-pills" role="tablist" aria-label="Task board views">
+    <button class="nav-link active" id="phases-tab" role="tab" aria-controls="phases-panel" aria-selected="true" type="button">Phases</button>
+    <button class="nav-link" id="decisions-tab" role="tab" aria-controls="decisions-panel" aria-selected="false" type="button">Decisions made</button>
+  </div>
+
+  <div id="phases-panel" role="tabpanel" aria-labelledby="phases-tab">
+    <div class="viz-controls" aria-label="Filter phases">
+      <button class="btn btn-primary" type="button" data-filter="all" aria-pressed="true">All</button>
+      <button class="btn" type="button" data-filter="built" aria-pressed="false">Build complete</button>
+      <button class="btn" type="button" data-filter="pending" aria-pressed="false">Acceptance pending</button>
+      <button class="btn" type="button" data-filter="queued" aria-pressed="false">Queued</button>
+      <span class="filter-summary text-small" aria-live="polite">Showing 8 phases</span>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead><tr><th>Phase</th><th>Status</th><th>Current outcome or next gate</th></tr></thead>
+        <tbody>
+          <tr data-status="built"><td><span class="phase-title">1. Fail-closed modes</span><span class="phase-detail">Mandatory response source and explicit demo requests</span></td><td><span class="viz-badge status-built">● Accepted · 4/4</span></td><td>Live, demo, unsupported, and disconnected behaviour confirmed.</td></tr>
+          <tr data-status="built"><td><span class="phase-title">2. Process Map sidecar</span><span class="phase-detail">Inspect, validate, generate, install, inventory</span></td><td><span class="viz-badge status-built">● Accepted · 4/4</span></td><td>Pinned sidecar, SHA256 provenance, safe install, and inventory confirmed.</td></tr>
+          <tr data-status="built"><td><span class="phase-title">3. Workflow packages</span><span class="phase-detail">Portable and protected layouts</span></td><td><span class="viz-badge status-built">● Accepted · 4/4</span></td><td>Original and transferred packages verify with matching hashes and completed acceptance.</td></tr>
+          <tr data-status="built"><td><span class="phase-title">4. Preview, approve, commit</span><span class="phase-detail">Owned preview geometry, modal approval, token-bound commit and rollback</span></td><td><span class="viz-badge status-built">● Accepted · 4/4</span></td><td>User reported all four live CAD acceptance checks passed.</td></tr>
+          <tr data-status="pending"><td><span class="phase-title">5. Controlled launcher</span><span class="phase-detail">Process Map to bridge action</span></td><td><span class="viz-badge status-blocked">● Design decision</span></td><td>Choose a Plugin node or Windows application control; bridge-side pinning cannot stop an edited map launching another executable.</td></tr>
+          <tr data-status="queued"><td><span class="phase-title">6. Async jobs and live adapters</span><span class="phase-detail">Cancellation, recovery, Scheduler and LHS</span></td><td><span class="viz-badge status-queued">○ Queued</span></td><td>Add bounded jobs, truthful partial outcomes, then verified live providers.</td></tr>
+          <tr data-status="queued"><td><span class="phase-title">7. MCP and AI workflows</span><span class="phase-detail">Typed tools over approved actions</span></td><td><span class="viz-badge status-queued">○ Queued</span></td><td>Expose the audited tool catalogue and provenance-backed assistance.</td></tr>
+          <tr data-status="queued"><td><span class="phase-title">8. Full-suite pilot</span><span class="phase-detail">Template and calculated workflow acceptance</span></td><td><span class="viz-badge status-queued">○ Queued</span></td><td>Run the complete suite and three-node pilot under both deployments.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="decisions-panel" role="tabpanel" aria-labelledby="decisions-tab" hidden>
+    <div class="decision-list">
+      <div class="decision-row"><span class="phase-title">Response contract</span><span>Every response has top-level <code>mode</code>; live failures never become demo data.</span><span class="viz-badge status-built">● Implemented</span></div>
+      <div class="decision-row"><span class="phase-title">Deployment</span><span>Portable and protected installations both receive full functionality; portable mode trusts the logged-in Windows user.</span><span class="viz-badge status-decision">◆ Selected</span></div>
+      <div class="decision-row"><span class="phase-title">Design scope</span><span>The entire underground roadmap is completed before the final pilot.</span><span class="viz-badge status-decision">◆ Selected</span></div>
+      <div class="decision-row"><span class="phase-title">Design library</span><span>Use versioned JSON files and a CAD-panel editor over the same schemas.</span><span class="viz-badge status-decision">◆ Selected</span></div>
+      <div class="decision-row"><span class="phase-title">Calculation basis</span><span>Production calculations require approved profiles; supplied examples remain synthetic.</span><span class="viz-badge status-decision">◆ Selected</span></div>
+      <div class="decision-row"><span class="phase-title">External integrations</span><span>Validated CSV/JSON mappings arrive before verified Scheduler and LHS live adapters.</span><span class="viz-badge status-decision">◆ Selected</span></div>
+      <div class="decision-row"><span class="phase-title">Human approval</span><span>The bridge mints only after a matching add-in preview result and default-No Deswik modal acceptance.</span><span class="viz-badge status-built">● Implemented</span></div>
+      <div class="decision-row"><span class="phase-title">Write boundary</span><span>Production UGDrillHole writes use a fixed layer; all six former direct writers are fenced.</span><span class="viz-badge status-built">● Implemented</span></div>
+      <div class="decision-row"><span class="phase-title">Execution gate</span><span>Exactly one numbered phase is implemented per run, followed by an unticked human checklist.</span><span class="viz-badge status-decision">◆ Locked</span></div>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const root = document.getElementById('workflow-bridge-board');
+      const buttons = [...root.querySelectorAll('[data-filter]')];
+      const rows = [...root.querySelectorAll('tbody tr[data-status]')];
+      const summary = root.querySelector('.filter-summary');
+      const saved = window.openai?.widgetState?.privateContent?.phaseFilter;
+      const initial = buttons.some(button => button.dataset.filter === saved) ? saved : 'all';
+
+      function applyFilter(filter, save) {
+        let visible = 0;
+        rows.forEach(row => {
+          const show = filter === 'all' || row.dataset.status.split(' ').includes(filter);
+          row.hidden = !show;
+          if (show) visible += 1;
+        });
+        buttons.forEach(button => {
+          const active = button.dataset.filter === filter;
+          button.setAttribute('aria-pressed', String(active));
+          button.classList.toggle('btn-primary', active);
+        });
+        summary.textContent = `Showing ${visible} phase${visible === 1 ? '' : 's'}`;
+        if (save && window.openai?.setWidgetState) {
+          window.openai.setWidgetState({ privateContent: { phaseFilter: filter }, modelContent: { phaseFilter: filter } }).catch(() => {});
+        }
+      }
+
+      buttons.forEach(button => button.addEventListener('click', () => applyFilter(button.dataset.filter, true)));
+      window.addEventListener('openai:set_globals', event => {
+        const filter = event.detail?.globals?.widgetState?.privateContent?.phaseFilter;
+        if (buttons.some(button => button.dataset.filter === filter)) applyFilter(filter, false);
+      });
+      applyFilter(initial, false);
+    })();
+  </script>
+</div>
