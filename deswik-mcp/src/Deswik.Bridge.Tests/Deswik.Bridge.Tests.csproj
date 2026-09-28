@@ -12,6 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Deswik.Bridge\Deswik.Bridge.csproj" />
     <ProjectReference Include="..\Deswik.Bridge.Standalone\Deswik.Bridge.Standalone.csproj" />
+    <ProjectReference Include="..\Deswik.Mcp.Server\Deswik.Mcp.Server.csproj" />
   </ItemGroup>
 
   <!--

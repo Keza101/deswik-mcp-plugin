@@ -4,6 +4,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Deswik.Bridge.Models;
 
 namespace Deswik.Addin;
 
@@ -57,26 +58,50 @@ internal sealed class GuardedWriteCoordinator
         return new PreviewResult(recordId, approvalId, previewHandles, manifest, manifestHash, binding);
     }
 
-    public CommitResult Commit(ApprovalBinding approved)
+    public CommitResult Commit(ApprovalBinding approved,
+        Action<int, int, ulong>? progress = null)
     {
         RefreshDocumentIdentity();
         var record = RequirePreview(approved.RecordId);
-        var currentFingerprint = TryFingerprint(record.SourceHandles);
+        var currentSourceHandles = _cad.GetAllHandlesExceptLayer(PreviewLayer);
+        if (!GuardedWriteSourcePolicy.HandleSetMatches(record.SourceHandles, currentSourceHandles))
+            throw new GuardedWriteException("stale_preview",
+                "The drawing source entity set changed; the preview remains for inspection");
+        var currentFingerprint = TryFingerprint(currentSourceHandles);
         var actual = new ApprovalBinding(record.ApprovalId, "commit", _documentGuid,
             _drawingPath, record.TargetLayer, record.ManifestHash, currentFingerprint, record.RecordId);
         if (!approved.Equals(actual))
             throw new GuardedWriteException("stale_preview",
                 "The drawing or preview source changed; the preview remains for inspection");
 
-        var handles = _cad.DrawUGDrillHolesGuarded(record.TargetLayer, record.Specs);
-        _cad.DeleteExactHandles(record.PreviewHandles);
-        var createdFingerprint = _cad.FingerprintHandles(handles);
-        var commitId = Guid.NewGuid().ToString("D");
-        var committed = new CommitRecord(commitId, record.DocumentGuid, record.DrawingPath,
-            record.TargetLayer, handles.ToArray(), createdFingerprint, record.Manifest);
-        _commits[commitId] = committed;
-        _preview = null;
-        return new CommitResult(commitId, record.TargetLayer, handles);
+        var before = _cad.GetLayerHandles(record.TargetLayer).ToHashSet();
+        try
+        {
+            var handles = _cad.DrawUGDrillHolesGuarded(record.TargetLayer, record.Specs, progress);
+            _cad.DeleteExactHandles(record.PreviewHandles);
+            var createdFingerprint = _cad.FingerprintHandles(handles);
+            var commitId = Guid.NewGuid().ToString("D");
+            var committed = new CommitRecord(commitId, record.DocumentGuid, record.DrawingPath,
+                record.TargetLayer, handles.ToArray(), createdFingerprint, record.Manifest);
+            _commits[commitId] = committed;
+            _preview = null;
+            return new CommitResult(commitId, record.TargetLayer, handles);
+        }
+        catch (Exception ex)
+        {
+            // Guarded drawing attempts a compensating delete by exact handle.
+            // If any of this commit's handles survive, report and retain them.
+            var survivors = _cad.GetLayerHandles(record.TargetLayer)
+                .Where(handle => !before.Contains(handle)).ToArray();
+            if (survivors.Length == 0) throw;
+            var commitId = Guid.NewGuid().ToString("D");
+            var fingerprint = TryFingerprint(survivors);
+            _commits[commitId] = new CommitRecord(commitId, record.DocumentGuid,
+                record.DrawingPath, record.TargetLayer, survivors, fingerprint, record.Manifest);
+            throw new GuardedWriteException("partial_write",
+                $"Commit failed with {survivors.Length} surviving handles: {ex.Message}",
+                survivors, commitId);
+        }
     }
 
     public RollbackPreview PrepareRollback(string commitId)
@@ -164,7 +189,15 @@ internal sealed class GuardedWriteCoordinator
 internal sealed class GuardedWriteException : Exception
 {
     public string ErrorCode { get; }
-    public GuardedWriteException(string errorCode, string message) : base(message) => ErrorCode = errorCode;
+    public IReadOnlyList<ulong> SurvivingHandles { get; }
+    public string? CommitId { get; }
+    public GuardedWriteException(string errorCode, string message,
+        IReadOnlyList<ulong>? survivingHandles = null, string? commitId = null) : base(message)
+    {
+        ErrorCode = errorCode;
+        SurvivingHandles = survivingHandles ?? Array.Empty<ulong>();
+        CommitId = commitId;
+    }
 }
 
 internal sealed record ChangeManifest(

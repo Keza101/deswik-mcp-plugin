@@ -20,7 +20,10 @@ namespace Deswik.Bridge.Standalone;
 /// </summary>
 class TcpBridge
 {
-    private const int Port = 9595;
+    static TcpBridge() => Jobs.WriteCancellationRequested += jobId => _ = SendJobCancelAsync(jobId);
+    private static readonly int Port = int.TryParse(
+        Environment.GetEnvironmentVariable("DESWIK_BRIDGE_PORT"), out var configuredPort) &&
+        configuredPort is >= 1 and <= 65535 ? configuredPort : 9595;
     private static readonly TimeSpan ForwardTimeout = TimeSpan.FromSeconds(15);
     private static readonly string LogFile = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -30,6 +33,7 @@ class TcpBridge
     private static DemoCommandHandler? _commandHandler;
     private static readonly ProcessMapSidecar ProcessMaps = new();
     private static readonly WriteTokenVault WriteTokens = new();
+    private static readonly BridgeJobs Jobs = new();
     private static bool _isRunning = true;
 
     // Connected Deswik addins (CAD, Sched, ...) routed by capability:
@@ -42,6 +46,7 @@ class TcpBridge
     // Requests forwarded to an addin, keyed by command id:
     // id -> (requester, addin the request went to).
     private static readonly ConcurrentDictionary<string, (ClientConnection Requester, ClientConnection Addin)> Pending = new();
+    private static readonly ConcurrentDictionary<string, (ClientConnection Addin, string JobId, TaskCompletionSource<McpResponse> Completion)> PendingJobs = new();
     private static readonly ConcurrentDictionary<string, (ClientConnection Addin, WriteBinding Binding)> PendingHumanApprovals = new();
 
     /// <summary>A connected TCP client with serialized writes.</summary>
@@ -82,7 +87,7 @@ class TcpBridge
     static async Task Main(string[] args)
     {
         Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
-        Console.WriteLine("║         Deswik MCP Bridge - TCP Mode (Port 9595)          ║");
+        Console.WriteLine($"║         Deswik MCP Bridge - TCP Mode (Port {Port})          ║");
         Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
         Console.WriteLine();
 
@@ -97,20 +102,31 @@ class TcpBridge
             Log("Explicit demo handler ready (used only when request mode is 'demo').");
             Log("Pinned Process Map sidecar ready for map.* actions.");
 
-            // Start TCP server
-            await StartTcpServerAsync();
+            using var stop = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, e) =>
+            {
+                e.Cancel = true;
+                stop.Cancel();
+            };
+            var server = StartTcpServerAsync(stop.Token);
 
             Console.WriteLine();
             Console.WriteLine("═══════════════════════════════════════════════════════════════");
             Console.WriteLine($"  MCP Bridge is running on TCP port {Port}");
             Console.WriteLine("═══════════════════════════════════════════════════════════════");
             Console.WriteLine();
-            Console.WriteLine("Press any key to stop...");
+            Console.WriteLine("Press any key or Ctrl+C to stop...");
             Console.WriteLine();
 
-            // Wait for key press
-            Console.ReadKey();
+            if (!Console.IsInputRedirected) Console.ReadKey();
+            else
+            {
+                try { await Task.Delay(Timeout.InfiniteTimeSpan, stop.Token); }
+                catch (OperationCanceledException) { }
+            }
+            stop.Cancel();
             _isRunning = false;
+            await server;
         }
         catch (Exception ex)
         {
@@ -140,21 +156,25 @@ class TcpBridge
         catch { }
     }
 
-    private static async Task StartTcpServerAsync()
+    private static async Task StartTcpServerAsync(CancellationToken stop)
     {
         var listener = new TcpListener(IPAddress.Loopback, Port);
         listener.Start();
         Log($"TCP Server started on port {Port}");
 
-        while (_isRunning)
+        while (_isRunning && !stop.IsCancellationRequested)
         {
             try
             {
-                var client = await listener.AcceptTcpClientAsync();
+                var client = await listener.AcceptTcpClientAsync(stop);
                 Log("Client connected");
                 _ = HandleClientAsync(client);
             }
-            catch (Exception ex) when (_isRunning)
+            catch (OperationCanceledException) when (stop.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex) when (_isRunning && !stop.IsCancellationRequested)
             {
                 Log($"Accept error: {ex.Message}");
             }
@@ -182,7 +202,8 @@ class TcpBridge
                     var line = await reader.ReadLineAsync();
                     if (line == null) break;
 
-                    Log($"Received: {line}");
+                    // Client frames can contain single-use write tokens.
+                    Log($"Received {(conn.IsAddin ? "addin" : "client")} frame ({Encoding.UTF8.GetByteCount(line)} bytes)");
 
                     if (!conn.IsAddin && BridgeResponsePolicy.IsHttpRequestLine(line))
                     {
@@ -274,6 +295,12 @@ class TcpBridge
             Log($"Addin '{name}' registered ({capabilities.Count} capabilities)");
             await conn.SendLineAsync(JsonSerializer.Serialize(
                 McpResponse.Ok(command.Id, new { registered = true, name })));
+            return;
+        }
+
+        if (command.Action is BridgeJobPolicy.SubmitAction or BridgeJobPolicy.GetAction or BridgeJobPolicy.CancelAction)
+        {
+            await HandleJobCommandAsync(conn, command);
             return;
         }
 
@@ -412,12 +439,53 @@ class TcpBridge
             return;
         }
 
+        if (!string.IsNullOrEmpty(id) && PendingJobs.TryGetValue(id, out var pendingJob))
+        {
+            if (pendingJob.Addin != sender)
+            {
+                Log($"Ignored job result from wrong addin (id={id})");
+                return;
+            }
+            if (root.TryGetProperty("action", out var jobAction) &&
+                jobAction.GetString() == "job_progress")
+            {
+                if (root.TryGetProperty("data", out var progress) &&
+                    progress.TryGetProperty("completed", out var completed) &&
+                    progress.TryGetProperty("total", out var total))
+                {
+                    ulong? handle = progress.TryGetProperty("handle", out var value) &&
+                        value.ValueKind == JsonValueKind.Number ? value.GetUInt64() : null;
+                    Jobs.ReportProgress(pendingJob.JobId, completed.GetInt32(), total.GetInt32(), handle);
+                }
+                return;
+            }
+            if (PendingJobs.TryRemove(id, out var owned))
+                owned.Completion.TrySetResult(AddinResult(id, root));
+            return;
+        }
+
         if (string.IsNullOrEmpty(id) || !Pending.TryRemove(id, out var entry))
         {
             Log($"Addin message with no pending request (id={id ?? "none"}) - ignored");
             return;
         }
 
+        var result = AddinResult(id, root);
+        if (result.Success && result.Data is JsonElement resultData &&
+            root.TryGetProperty("action", out var resultActionElement) &&
+            resultActionElement.GetString() is "preview_ugdrillholes_result" or "prepare_rollback_ugdrillholes_result" &&
+            TryReadApprovedBinding(resultData, out var pendingBinding))
+        {
+            PendingHumanApprovals[pendingBinding.ApprovalId] = (sender, pendingBinding);
+        }
+
+        var json = JsonSerializer.Serialize(result);
+        await entry.Requester.SendLineAsync(json);
+        Log($"Relayed addin response for id={id}");
+    }
+
+    private static McpResponse AddinResult(string id, JsonElement root)
+    {
         var error = root.TryGetProperty("error", out var e) && e.ValueKind == JsonValueKind.String
             ? e.GetString()
             : null;
@@ -426,22 +494,11 @@ class TcpBridge
             : null;
         object? data = root.TryGetProperty("data", out var d) ? d.Clone() : null;
 
-        var resultAction = root.TryGetProperty("action", out var resultActionElement)
-            ? resultActionElement.GetString() : null;
-        if (error == null && data is JsonElement resultData &&
-            resultAction is "preview_ugdrillholes_result" or "prepare_rollback_ugdrillholes_result" &&
-            TryReadApprovedBinding(resultData, out var pendingBinding))
-        {
-            PendingHumanApprovals[pendingBinding.ApprovalId] = (sender, pendingBinding);
-        }
-
         var response = error == null
             ? McpResponse.Ok(id, data)
             : McpResponse.Fail(id, error, errorCode ?? "ADDIN_ERROR");
-
-        var json = JsonSerializer.Serialize(response);
-        await entry.Requester.SendLineAsync(json);
-        Log($"Relayed addin response for id={id}");
+        if (error != null) response.Data = data;
+        return response;
     }
 
     private static void HandleHumanApproval(WriteBinding binding)
@@ -519,6 +576,145 @@ class TcpBridge
             : value as string;
     }
 
+    private static async Task HandleJobCommandAsync(ClientConnection conn, McpCommand command)
+    {
+        if (McpResponseMode.IsDemoRequest(command.Mode))
+        {
+            await conn.SendLineAsync(JsonSerializer.Serialize(McpResponse.Fail(command.Id,
+                "Jobs require live mode", "job_live_required")));
+            return;
+        }
+
+        if (command.Action == BridgeJobPolicy.SubmitAction)
+        {
+            var action = GetStringParam(command, "action");
+            if (action == null || !BridgeJobPolicy.CanSubmit(action))
+            {
+                await conn.SendLineAsync(JsonSerializer.Serialize(McpResponse.Fail(command.Id,
+                    "Action is not approved for asynchronous jobs", "job_action_refused")));
+                return;
+            }
+            Dictionary<string, object>? parameters = null;
+            if (command.Params?.TryGetValue("args", out var args) == true)
+            {
+                if (args is not JsonElement element || element.ValueKind != JsonValueKind.Object)
+                {
+                    await conn.SendLineAsync(JsonSerializer.Serialize(McpResponse.Fail(command.Id,
+                        "Job args must be an object", "job_invalid_args")));
+                    return;
+                }
+                parameters = element.Deserialize<Dictionary<string, object>>();
+            }
+            var inner = new McpCommand { Action = action, Params = parameters, Mode = McpResponseMode.Live };
+            var refused = GuardedWritePolicy.RefuseUnfenced(inner);
+            if (refused != null)
+            {
+                refused.Id = command.Id;
+                await conn.SendLineAsync(JsonSerializer.Serialize(refused));
+                return;
+            }
+            var job = Jobs.Submit(action, BridgeJobPolicy.CeilingFor(action),
+                (jobId, cancellation) => ExecuteJobAsync(jobId, inner, cancellation));
+            await conn.SendLineAsync(JsonSerializer.Serialize(McpResponse.Ok(command.Id, job)));
+            return;
+        }
+
+        var id = GetStringParam(command, "jobId");
+        var snapshot = id == null ? null : command.Action == BridgeJobPolicy.CancelAction
+            ? Jobs.Cancel(id) : Jobs.Get(id);
+        McpResponse result;
+        if (snapshot == null)
+            result = McpResponse.Fail(command.Id, "Job is unknown to this bridge process", "job_unknown");
+        else if (snapshot.State is "failed" or "cancelled" or "partial")
+        {
+            result = McpResponse.Fail(command.Id, snapshot.Error ?? snapshot.State,
+                snapshot.ErrorCode ?? "job_failed");
+            result.Data = snapshot;
+        }
+        else result = McpResponse.Ok(command.Id, snapshot);
+        await conn.SendLineAsync(JsonSerializer.Serialize(result));
+    }
+
+    private static async Task<McpResponse> ExecuteJobAsync(
+        string jobId, McpCommand command, CancellationToken cancellation)
+    {
+        var isWrite = BridgeJobPolicy.IsWrite(command.Action);
+        string wireAction = command.Action;
+        object? wireParams = command.Params;
+
+        if (isWrite)
+        {
+            if (cancellation.IsCancellationRequested)
+                return McpResponse.Fail(command.Id, "Job was cancelled before commit dispatch", "job_cancelled");
+            var operation = command.Action == GuardedWritePolicy.CommitAction ? "commit" : "rollback";
+            var token = GetStringParam(command, "token");
+            var consumed = token == null
+                ? new TokenConsumeResult(false, "token_invalid", null)
+                : WriteTokens.Consume(token, operation);
+            if (!consumed.Success || consumed.Binding == null)
+                return McpResponse.Fail(command.Id, "Write token was rejected",
+                    consumed.ErrorCode ?? "token_invalid");
+            wireAction = operation == "commit"
+                ? GuardedWritePolicy.InternalCommitAction
+                : GuardedWritePolicy.InternalRollbackAction;
+            var binding = consumed.Binding;
+            wireParams = new
+            {
+                binding.ApprovalId, binding.Operation, binding.DocumentGuid,
+                binding.DrawingPath, binding.TargetLayer, binding.ManifestHash,
+                binding.SourceFingerprint, binding.RecordId, JobId = jobId
+            };
+        }
+
+        ClientConnection? addin;
+        lock (AddinLock)
+        {
+            CapabilityMap.TryGetValue(isWrite
+                ? command.Action == GuardedWritePolicy.CommitAction
+                    ? GuardedWritePolicy.PreviewAction
+                    : GuardedWritePolicy.PrepareRollbackAction
+                : command.Action, out addin);
+        }
+        if (addin == null)
+            return McpResponse.Fail(command.Id, "No addin registered the job action", "ADDIN_DISCONNECTED");
+
+        var internalId = Guid.NewGuid().ToString("D");
+        var completion = new TaskCompletionSource<McpResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        PendingJobs[internalId] = (addin, jobId, completion);
+        try
+        {
+            if (isWrite && !Jobs.TryStartWrite(jobId))
+                return McpResponse.Fail(command.Id, "Job was cancelled before commit dispatch", "job_cancelled");
+            await addin.SendLineAsync(JsonSerializer.Serialize(new
+            {
+                id = internalId, action = wireAction, @params = wireParams
+            }));
+            // A production commit runs to its own boundary once dispatched.
+            // Read jobs can be abandoned at their cancellation/deadline.
+            return isWrite ? await completion.Task : await completion.Task.WaitAsync(cancellation);
+        }
+        finally
+        {
+            PendingJobs.TryRemove(internalId, out _);
+        }
+    }
+
+    private static async Task SendJobCancelAsync(string jobId)
+    {
+        var pending = PendingJobs.FirstOrDefault(pair =>
+            string.Equals(pair.Value.JobId, jobId, StringComparison.Ordinal));
+        if (pending.Key == null) return;
+        try
+        {
+            await pending.Value.Addin.SendLineAsync(JsonSerializer.Serialize(new
+            {
+                id = Guid.NewGuid().ToString("D"), action = "_job_cancel",
+                @params = new { jobId }
+            }));
+        }
+        catch (Exception ex) { Log($"Could not signal job cancellation: {ex.Message}"); }
+    }
+
     private static void StartForwardTimeout(string requestId, string action)
     {
         _ = Task.Run(async () =>
@@ -569,6 +765,10 @@ class TcpBridge
         }
         foreach (var approval in PendingHumanApprovals.Where(pair => pair.Value.Addin == conn).Select(pair => pair.Key))
             PendingHumanApprovals.TryRemove(approval, out _);
+        foreach (var (id, pending) in PendingJobs)
+            if (pending.Addin == conn && PendingJobs.TryRemove(id, out _))
+                pending.Completion.TrySetResult(McpResponse.Fail(id,
+                    "Addin disconnected while a job was running", "ADDIN_DISCONNECTED"));
     }
 }
 

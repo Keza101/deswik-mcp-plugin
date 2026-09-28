@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from deswik_pm import DdfFile, Diagram, NodeTag
-from deswik_pm.__main__ import _install_map, _inventory
+from deswik_pm.__main__ import _install_map, _inventory, build_parser
 from deswik_pm.sidecar import handle as sidecar_handle
 from deswik_pm.package import build_package, verify_package
 
@@ -189,6 +189,26 @@ def test_package_hash_and_registry_tamper_refusal():
     print("PASS package verify rejects altered maps and hand-edited command claims")
 
 
+def test_phase_5_macro_map_uses_wwb_header():
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "phase-5.ddf"
+        args = build_parser().parse_args([
+            "plugin-test", "--donor", str(_sample()), "--out", str(out),
+        ])
+        assert args.func(args) == 0
+        diagram = Diagram.load(out)
+        commands = [entry for node in diagram.nodes for entry in node.tag.commands]
+        assert len(commands) == 2
+        assert all(entry.name == "EmbeddedMacro" for entry in commands)
+        assert all(entry.payload.startswith("'#Language \"WWB.NET\"\n") for entry in commands)
+        assert all("MsgBoxStyle" not in entry.payload for entry in commands)
+        assert all("BindingFlags" not in entry.payload for entry in commands)
+        assert "MCP_READ_DOCUMENT" in commands[0].payload
+        assert "MCP_NOT_ALLOWED" in commands[1].payload
+        assert diagram.ddf.to_bytes() == out.read_bytes()
+    print("PASS Phase 5 map embeds the verified WWB.NET header on both nodes")
+
+
 if __name__ == "__main__":
     test_file_roundtrip_byte_identical()
     test_tag_roundtrip_all_nodes()
@@ -197,4 +217,5 @@ if __name__ == "__main__":
     test_sidecar_inspect_hashes()
     test_install_refuses_traversal_and_existing_destination()
     test_package_hash_and_registry_tamper_refusal()
+    test_phase_5_macro_map_uses_wwb_header()
     print("\nALL TESTS PASSED")

@@ -843,7 +843,8 @@ internal class CadReader
         };
     }
 
-    public IReadOnlyList<ulong> DrawUGDrillHolesGuarded(string layerName, IReadOnlyList<UGHoleSpec> specs)
+    public IReadOnlyList<ulong> DrawUGDrillHolesGuarded(string layerName,
+        IReadOnlyList<UGHoleSpec> specs, Action<int, int, ulong>? progress = null)
     {
         var layer = _app.Layers.FindName(layerName);
         if (layer == null)
@@ -864,6 +865,7 @@ internal class CadReader
                 if (errors.GetArrayLength() != 0)
                     throw new InvalidOperationException(errors[0].GetString());
                 handles.Add(json.GetProperty("handles")[0].GetUInt64());
+                progress?.Invoke(handles.Count, specs.Count, handles[^1]);
             }
             return handles;
         }

@@ -38,12 +38,12 @@ Response (bridge → client):
 
 ## Rules
 
-- **`id` must be unique per request.** The bridge keeps a 15 s timeout timer
-  per id; reusing an id lets a stale timer kill the newer request.
+- **`id` must be unique per request.** Direct forwarded requests keep a 15 s
+  timeout timer per id; reusing an id can let a stale timer kill a newer request.
 - Live requests fail closed. The bridge never substitutes demo data when a
   live provider is missing.
-- Requests time out after **15 s** at the bridge. Long-running work should be
-  started asynchronously by the add-in with a separate status-poll action.
+- Direct forwarded requests time out after **15 s**. Approved long-running
+  actions use bridge-owned jobs, described below.
 - Writers must use `new UTF8Encoding(false)` — a BOM on the first line breaks
   the bridge's JSON parser.
 
@@ -97,6 +97,79 @@ Rollback is a second guarded operation:
 `prepare_rollback_ugdrillholes` shows the exact commit record, and
 `rollback_ugdrillholes` requires its own human-approved token. Deletion is by
 the recorded handles only.
+
+## Async jobs
+
+Submit an approved long read or guarded write with `job.submit`; it returns a
+job ID without waiting for the CAD result:
+
+```json
+{ "id": "submit-1", "action": "job.submit",
+  "params": { "action": "get_cad_elements", "args": { "limit": 100 } } }
+{ "id": "submit-1", "mode": "live", "success": true,
+  "data": { "JobId": "...", "State": "queued", "DeadlineAt": "..." } }
+```
+
+Poll with `job.get` and cancel with `job.cancel`, each using
+`{ "jobId": "..." }`. States are `queued`, `running`, `completed`,
+`cancelled`, `failed`, and `partial`. A poll of a failed or partial job has
+`success: false`, `mode: live`, and a job snapshot in `data`. A bridge restart
+forgets all IDs; polling an old ID fails with `job_unknown`.
+
+The exact `job.submit` set is `get_cad_document`, `get_cad_layers`,
+`get_cad_layer_attributes`, `get_cad_elements`, `get_cad_selection`,
+`get_cad_polyface_info`, `get_cad_polylines_under`,
+`get_cad_blasthole_details`, `get_cad_ugdrillhole_details`,
+`commit_ugdrillholes`, and `rollback_ugdrillholes`. A commit or rollback
+still requires its own human-minted token in `args`. Unknown actions and legacy
+writers fail with `job_action_refused` before a job is created. Cancelling
+before write dispatch leaves no production geometry. Once a whole commit has
+started, cancellation waits for the add-in's result; a completed commit is
+reported `completed` with its handles, and any surviving handles after a
+failed commit are reported as `partial`.
+
+Each job has a default 30-minute ceiling. The bridge host can set a shorter
+per-action ceiling with `DESWIK_JOB_TIMEOUT_SECONDS_<ACTION>`, where dots become
+underscores and the value is 1–1800 seconds. A deadline during an active
+commit reports `partial` with `job_deadline_write_unknown` until the add-in
+reports the outcome. Inspect the drawing before another write if the add-in
+never reports a result.
+
+The PowerShell client returns only successful `data` by default. Use
+`-RawResponse` when polling so failure snapshots and surviving handles remain
+visible.
+
+## MCP stdio adapter
+
+`deswik-mcp/src/Deswik.Mcp.Server` is the MCP boundary. It uses newline-
+delimited JSON-RPC 2.0 on stdin/stdout and supports the `2025-11-25`,
+`2025-06-18`, and `2025-03-26` initialization versions for compatible local
+clients. The server advertises only the `tools` capability; logs and bridge
+traffic never use stdout.
+
+`tools/list` returns an exact 20-tool catalogue:
+
+- CAD reads: `get_cad_document`, `get_cad_layers`,
+  `get_cad_layer_attributes`, `get_cad_elements`, `get_cad_selection`,
+  `get_cad_polyface_info`, `get_cad_polylines_under`,
+  `get_cad_blasthole_details`, and `get_cad_ugdrillhole_details`.
+- Guarded workflow: `preview_ugdrillholes`, `get_write_approval`,
+  `commit_ugdrillholes`, `prepare_rollback_ugdrillholes`, and
+  `rollback_ugdrillholes`.
+- Jobs: `job.submit`, `job.get`, and `job.cancel`.
+- Read-only Process Map operations: `map.inspect`, `map.validate`, and
+  `map.inventory`.
+
+Tool calls always send `mode: live` to the loopback bridge. An unknown tool is
+refused before any TCP connection. Direct commit and rollback tools require a
+non-empty human-minted token, as do commit and rollback actions nested inside
+`job.submit`; missing tokens return `isError: true` with
+`human_token_required`. File-producing `map.generate` and `map.install`, the
+six legacy CAD writers, internal actions, and demo mode are not MCP tools.
+
+Successful and failed bridge envelopes are returned in `structuredContent`
+and mirrored as JSON text content. A bridge failure sets `isError: true`
+without changing its `mode` or `errorCode`.
 
 ## PowerShell client
 

@@ -27,6 +27,8 @@ Deswik.CAD ── Deswik.Addin (this plugin, loaded by Plugin Manager)
 - `deswik-mcp/src/Deswik.Bridge.Standalone` — standalone TCP bridge that
   routes requests to whichever add-in registered the capability and owns the
   pinned local Process Map sidecar actions.
+- `deswik-mcp/src/Deswik.Mcp.Server` provides a dependency-free stdio MCP
+  server with typed tools over an explicit, fail-closed subset of actions.
 - `deswik-mcp/tools/deswik.ps1` — PowerShell client
   (`. deswik.ps1; dsw get_layers`).
 - `deswik_pm` — local copy of the Process Map SDK used by the bridge sidecar.
@@ -44,6 +46,7 @@ $env:DESWIK_DIR = $deswikDir
 $env:DESWIK_MCP_PYTHON = (Get-Command python).Source
 dotnet build deswik-mcp/src/Deswik.Addin/Deswik.Addin.csproj -c Release
 dotnet build deswik-mcp/src/Deswik.Bridge.Standalone -c Release
+dotnet build deswik-mcp/src/Deswik.Mcp.Server -c Release
 dotnet test deswik-mcp/src/Deswik.Bridge.Tests -c Release
 ```
 
@@ -64,6 +67,19 @@ CAD production writes use the guarded flow documented in
 `docs/CAD-Actions.md`: preview on `_MCP_PREVIEW`, a default-No approval modal
 inside Deswik, then a single-use token-bound commit. The six older direct
 writer actions fail with `forbidden_unfenced`.
+
+Long CAD reads and guarded commits can run as bridge-owned jobs. Submit with
+`job.submit`, poll with `job.get`, and request cancellation with `job.cancel`.
+The job ID is valid only for the current bridge process. See
+`docs/Wire-Protocol.md` for the action allowlist, deadlines, and cancellation
+states.
+
+The stdio MCP adapter exposes 20 typed tools: live CAD reads, the guarded
+preview/approval/commit/rollback flow, async job controls, and read-only
+Process Map inspection. It does not expose legacy CAD writers or the
+file-producing `map.generate` and `map.install` actions. A direct or async
+production CAD write is refused before reaching the bridge unless its tool
+arguments contain a human-minted single-use token.
 
 ## Run
 
@@ -90,13 +106,30 @@ Port `9595` is a raw JSON-over-TCP endpoint, not a website. Do not open it in
 a browser. Use the PowerShell client above; add `-Mode demo` only when
 synthetic demo data is explicitly required.
 
+For an MCP client, configure the built stdio executable while leaving the
+bridge running separately:
+
+```json
+{
+  "mcpServers": {
+    "deswik": {
+      "command": "H:\\Apps_Tools\\Deswik-Tools\\Deswik-MCP-Plugin\\deswik-mcp\\src\\Deswik.Mcp.Server\\bin\\Release\\net8.0\\Deswik.Mcp.Server.exe"
+    }
+  }
+}
+```
+
+The adapter writes only JSON-RPC frames to stdout. It connects only to the
+loopback bridge, using port `9595` unless `DESWIK_BRIDGE_PORT` is set for a
+disposable local test instance.
+
 ## Wire protocol
 
 One JSON object per line over TCP (UTF-8, **no BOM**):
 request `{ "id": "...", "action": "...", "params": { } }` →
 response `{ "id": "...", "mode": "live", "success": true, "data": { } }`.
-Use a fresh unique `id` per request — duplicate ids confuse the 15 s timeout
-bookkeeping.
+Use a fresh unique `id` per request — duplicate ids confuse direct request
+timeout bookkeeping.
 
 Responses always include a top-level `mode`: `live`, `demo`, `unsupported`,
 or `disconnected`. Requests default to live and fail closed when the add-in or

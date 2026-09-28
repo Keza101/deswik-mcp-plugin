@@ -50,10 +50,21 @@ try {
         'Application property exists' = $null -ne $type.GetProperty('Application')
         'Load method exists' = @($type.GetMethods() | Where-Object Name -eq 'Load').Count -ge 1
         'Unload method exists' = @($type.GetMethods() | Where-Object Name -eq 'Unload').Count -eq 1
+        'Process Map command inventory exists' = @($type.GetMethods() | Where-Object Name -eq 'GetCommands').Count -eq 1
+        'Process Map command dispatcher exists' = @($type.GetMethods() | Where-Object Name -eq 'ExecuteByID').Count -eq 1
     }
 
     $instance = [Activator]::CreateInstance($type)
     $checks['startup type constructs'] = $null -ne $instance
+    $mapType = $assembly.GetType('Deswik.Addin.ProcessMapActions', $true)
+    $checks['Process Map action type is public static'] =
+        $mapType.IsPublic -and $mapType.IsAbstract -and $mapType.IsSealed
+    $checks['Process Map Run method is public static'] = @($mapType.GetMethods() | Where-Object {
+        $_.Name -eq 'Run' -and $_.IsPublic -and $_.IsStatic -and
+        $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType -eq [string]
+    }).Count -eq 1
+    $checks['obsolete Process Map startup type is absent'] =
+        $null -eq $assembly.GetType('Deswik.Addin.MCP_READ_DOCUMENT', $false)
 
     $registryPath = 'HKCU:\Software\Deswik\2025.2\Deswik.CAD\Plugins\Deswik.Addin'
     $registration = Get-ItemProperty -Path $registryPath

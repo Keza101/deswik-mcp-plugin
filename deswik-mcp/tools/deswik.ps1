@@ -15,7 +15,8 @@ function Invoke-Deswik {
         [string] $BridgeHost = "127.0.0.1",
         [int] $Port = 9595,
         [int] $TimeoutSec = 60,
-        [ValidateSet("live", "demo")] [string] $Mode = "live"
+        [ValidateSet("live", "demo")] [string] $Mode = "live",
+        [switch] $RawResponse
     )
 
     $client = [System.Net.Sockets.TcpClient]::new()
@@ -35,6 +36,7 @@ function Invoke-Deswik {
         $line = $reader.ReadLine()
         if (-not $line) { throw "no response from bridge" }
         $resp = $line | ConvertFrom-Json
+        if ($RawResponse) { return $resp }
         if (-not $resp.success) {
             throw "$Action failed: $($resp.error) [$($resp.errorCode)]"
         }

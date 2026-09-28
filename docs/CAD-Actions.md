@@ -35,6 +35,10 @@ with `forbidden_unfenced`: `create_cad_layer`, `draw_cad_text`,
 `draw_cad_ugdrillholes`. The only exception is `create_cad_layer` when `name`
 is exactly `_MCP_PREVIEW`.
 
+Long reads and token-bound commit/rollback can also be submitted through the
+bridge's `job.submit` action, then polled or cancelled by job ID. The same
+guarded-write token and CAD UI-thread rules apply; see `docs/Wire-Protocol.md`.
+
 See `CadReader.cs` for the exact hole-spec fields — the two drill-hole actions
 create native Deswik.UGDB-compatible entities, which need `Hole` (ID) and
 `OriginalLength` populated or UGDB shows blank IDs / zero lengths.

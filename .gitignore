@@ -7,6 +7,7 @@
 *.duf.lck
 docs/Backup/
 !.gitignore
+!.gitattributes
 !README.md
 !docs/
 !deswik_pm/
@@ -14,6 +15,7 @@ docs/Backup/
 tests/*
 !tests/test_roundtrip.py
 !tests/test_commands.py
+!tests/test_phase6_tcp.py
 !tests/archive_ddf/
 tests/archive_ddf/*
 !tests/archive_ddf/SDK - Stope Design Layout.ddf
@@ -25,6 +27,7 @@ deswik-mcp/src/*
 !deswik-mcp/src/Deswik.Bridge/
 !deswik-mcp/src/Deswik.Bridge.Standalone/
 !deswik-mcp/src/Deswik.Bridge.Tests/
+!deswik-mcp/src/Deswik.Mcp.Server/
 !deswik-mcp/tools/
 deswik-mcp/tools/*
 !deswik-mcp/tools/deswik.ps1

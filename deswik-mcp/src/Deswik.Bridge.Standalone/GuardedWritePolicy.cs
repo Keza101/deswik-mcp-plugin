@@ -28,7 +28,7 @@ public static class GuardedWritePolicy
 
     public static McpResponse? RefuseUnfenced(McpCommand command)
     {
-        if (command.Action is InternalCommitAction or InternalRollbackAction or InternalApprovalAction)
+        if (command.Action is InternalCommitAction or InternalRollbackAction or InternalApprovalAction or "_job_cancel")
             return McpResponse.Fail(command.Id, "Internal write action is not callable", "forbidden_unfenced");
         if (!LegacyWriterActions.Contains(command.Action)) return null;
         if (command.Action == "create_cad_layer" && ExactPreviewLayer(command.Params)) return null;

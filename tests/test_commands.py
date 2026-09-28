@@ -78,6 +78,26 @@ def test_select_entities_and_attributes_validate_roundtrip():
     print("PASS SelectEntities/AttributesValidate round-trip")
 
 
+def test_plugin_payload_roundtrip():
+    from deswik_pm.commands import Plugin
+    from deswik_pm.tag import CommandEntry
+
+    captured = {
+        "Deswik.UGDB{RingDesign}": ("Deswik.UGDB", "RingDesign"),
+        "Deswik.MDM.CadPlugin{Controller}": ("Deswik.MDM.CadPlugin", "Controller"),
+    }
+    for raw, expected in captured.items():
+        plugin = Plugin.from_entry(CommandEntry("Plugin", raw))
+        assert plugin.is_valid
+        assert (plugin.plugin_name, plugin.command_id) == expected
+        assert plugin.payload == raw
+    malformed = "Deswik.Addin{MCP_READ_DOCUMENT};cmd.exe"
+    plugin = Plugin.from_entry(CommandEntry("Plugin", malformed))
+    assert not plugin.is_valid
+    assert plugin.payload == malformed
+    print("PASS captured Plugin payloads round-trip and malformed payload is not typed")
+
+
 def test_registry_coverage():
     print(f"registry: {len(COMMAND_CLASSES)} commands, {len(VERIFIED_COMMANDS)} verified")
     assert len(COMMAND_CLASSES) >= 69
@@ -87,5 +107,6 @@ if __name__ == "__main__":
     test_all_payloads_roundtrip()
     test_typed_access()
     test_select_entities_and_attributes_validate_roundtrip()
+    test_plugin_payload_roundtrip()
     test_registry_coverage()
     print("\nALL TESTS PASSED")

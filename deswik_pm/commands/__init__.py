@@ -10,6 +10,7 @@ from .library import (
     MenuCommand,
     NodeStatus,
     OpenProcessMap,
+    Plugin,
     SetNodeStatus,
     resolve,
 )
@@ -17,6 +18,6 @@ from .library import (
 __all__ = [
     "DataSetCommand", "DelimitedCommand", "GenericCommand", "MessageBox",
     "COMMAND_CLASSES", "VERIFIED_COMMANDS", "resolve",
-    "MenuCommand", "OpenProcessMap", "EmbeddedMacro", "ExecuteFile",
+    "MenuCommand", "OpenProcessMap", "EmbeddedMacro", "ExecuteFile", "Plugin",
     "DisplayProcessMapLayer", "SetNodeStatus", "DocumentSettings", "NodeStatus",
 ]

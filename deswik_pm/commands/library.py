@@ -16,6 +16,8 @@ Payload delimiter levels (outermost first):
 """
 from __future__ import annotations
 
+import re
+
 from ..tag import ARG_SEP, CommandEntry
 from .base import DataSetCommand, DelimitedCommand, GenericCommand
 from .message_box import MessageBox
@@ -114,6 +116,49 @@ class ExecuteFile(DelimitedCommand):
 
     name = "ExecuteFile"
     fields = ["path", "args", "flag1", "flag2", "timeout_seconds"]
+
+
+class Plugin(GenericCommand):
+    """Load a startup class from a Deswik plugin assembly. VERIFIED.
+
+    Captured payload: ``Plugin.Assembly{StartupClass}``.
+    """
+
+    name = "Plugin"
+    _pattern = re.compile(
+        r"^(?P<plugin>[A-Za-z][A-Za-z0-9_.]*)\{(?P<command>[A-Za-z][A-Za-z0-9_.-]*)\}$"
+    )
+
+    def __init__(self, plugin_name: str = "", command_id: str = ""):
+        self.plugin_name = plugin_name
+        self.command_id = command_id
+        self._raw: str | None = None
+
+    @property
+    def payload(self) -> str:
+        return self._raw if self._raw is not None else f"{self.plugin_name}{{{self.command_id}}}"
+
+    @payload.setter
+    def payload(self, raw: str) -> None:
+        match = self._pattern.fullmatch(raw)
+        if match is None:
+            self.plugin_name = ""
+            self.command_id = ""
+            self._raw = raw
+            return
+        self.plugin_name = match.group("plugin")
+        self.command_id = match.group("command")
+        self._raw = None
+
+    @property
+    def is_valid(self) -> bool:
+        return self._raw is None and bool(self.plugin_name and self.command_id)
+
+    @classmethod
+    def from_entry(cls, entry: CommandEntry):
+        obj = cls()
+        obj.payload = entry.payload
+        return obj
 
 
 class DisplayProcessMapLayer(GenericCommand):
@@ -629,7 +674,6 @@ _NAME_CONFIRMED = {
     "InteractiveFilter": "Temporary interactive filter on layers.",
     "LayerTreeVisibility": "Select which layers show in the layer tree.",
     "PlaneDefinition": "Create a plane definition from the current view/working plane.",
-    "Plugin": "Start a plugin from the process map.",
     "PolylineOffset": "Offset polyline segments by distance on the same plane.",
     "PolylineProjection": "Project polyline vertex z-coordinates.",
     "PolylineVertexAttributes": "Digitize/assign attributes to polyline vertices.",
@@ -725,7 +769,7 @@ globals().update(_unverified_classes)
 VERIFIED_COMMANDS = {
     cls.name: cls
     for cls in [
-        MenuCommand, OpenProcessMap, EmbeddedMacro, ExecuteFile, CreateLayers,
+        MenuCommand, OpenProcessMap, EmbeddedMacro, ExecuteFile, Plugin, CreateLayers,
         ApplyAttributes, SelectEntities, AttributesValidate,
         DisplayProcessMapLayer, SetNodeStatus, DocumentSettings, NodeStatus,
         ApplyLayout, JsonCommandList,

@@ -2,11 +2,17 @@
 
 ## Gate
 
-Phase 4 accepted by the user: all four human checks passed on 2026-09-24.
+Phase 4 accepted by the user: all four human checks passed on 2026-09-24 and
+the complete gate was revalidated on the new machine on 2026-09-25.
 
 ## Status
 
-Complete. The user reported all four live Deswik.CAD acceptance checks passed on 2026-09-24. This is human-reported acceptance, not an independently observed CAD run in this session.
+Complete. The user reported all four live Deswik.CAD acceptance checks passed
+on 2026-09-24. During the 2026-09-25 new-machine revalidation, the stale-source
+test exposed that newly added handles were not included in the commit-time
+fingerprint. Commit now compares the complete non-preview handle set before
+fingerprinting it. The automated regression suite passed and the user confirmed
+the repaired live gate returned `stale_preview` with no production holes.
 
 ## Changed files
 
@@ -21,6 +27,7 @@ Historical file paths below use `<PLUGIN_ROOT>` in place of the earlier machine'
 - `<PLUGIN_ROOT>\deswik-mcp\src\Deswik.Addin\Deswik.Addin.csproj`
 - `<PLUGIN_ROOT>\deswik-mcp\src\Deswik.Addin\DeswikMcpAddin.cs`
 - `<PLUGIN_ROOT>\deswik-mcp\src\Deswik.Addin\GuardedWriteCoordinator.cs`
+- `<PLUGIN_ROOT>\deswik-mcp\src\Deswik.Bridge\models\GuardedWriteSourcePolicy.cs`
 - `<PLUGIN_ROOT>\deswik-mcp\tools\Test-AddinPreflight.ps1`
 - `<PLUGIN_ROOT>\docs\CAD-Actions.md`
 - `<PLUGIN_ROOT>\docs\Wire-Protocol.md`
@@ -32,7 +39,10 @@ Historical file paths below use `<PLUGIN_ROOT>` in place of the earlier machine'
 - Deswik shows the manifest in a `Yes/No` modal with `No` selected by default. The display uses live document data and sanitized identifiers; newline and field-separator injection is removed.
 - The bridge accepts an approval event only from the add-in connection that produced the matching preview result. It verifies the manifest SHA256 before recording the pending approval. The mint function has one release call site.
 - Tokens contain 256 bits of CSPRNG entropy, expire after 10 minutes, live only in the bridge process, and are consumed before the first commit or rollback attempt.
-- Commit re-fingerprints the loaded production drawing before creating native `UGDrillHole` entities on `RINGDESIGN\_MCP_APPROVED\HOLES`. A mismatch returns `stale_preview`, creates nothing, consumes the token, and leaves the preview.
+- Commit first compares the complete non-preview source handle set and then
+  re-fingerprints those handles before creating native `UGDrillHole` entities
+  on `RINGDESIGN\_MCP_APPROVED\HOLES`. Additions, removals, and changes return
+  `stale_preview`, create nothing, consume the token, and leave the preview.
 - Rollback requires a separate default-No modal and token. It deletes only handles stored in that commit record.
 - Unsaved drawings fail with `drawing_unsaved` because a write token cannot be bound to an empty drawing path.
 - The six prior writers are fenced in the bridge and add-in: `draw_cad_text`, `draw_cad_polylines`, `slice_cad_polyface`, `draw_cad_blastholes`, and `draw_cad_ugdrillholes` return `forbidden_unfenced`; `create_cad_layer` does too unless the name is exactly `_MCP_PREVIEW`.
@@ -56,7 +66,11 @@ dotnet test `
   -p:DeswikDir="$env:DESWIK_DIR"
 ```
 
-Results: both Python suites passed; 15 bridge tests passed; Addin Release build passed with 11 dependency-resolution warnings and 0 errors; Standalone Release build passed with 8 dependency-resolution warnings and 0 errors. A live loopback abuse check returned `forbidden_unfenced` for a legacy writer and internal commit action, and `approval_unavailable` for an unapproved ID.
+Results on the 2026-09-25 new-machine revalidation: both Python suites passed;
+16 bridge tests passed, including added/removed source-handle regression cases;
+the Addin Release build passed with 11 known dependency-resolution warnings and
+0 errors; add-in preflight passed 13/13. The user confirmed the live stale-source
+test returned `stale_preview` and created no production holes.
 
 Host preflight: `Test-AddinPreflight.ps1` passed 13/13 checks with CAD closed. In Deswik.CAD 2025.2.3940, Plugin Manager loaded the Release `Deswik.Addin` with startup class `DeswikMcpAddin` and showed the MCP panel. With the Release bridge connected, `get_cad_document` returned an unsaved `Document 1`; `preview_ugdrillholes` returned `drawing_unsaved`, and `get_cad_layers` showed no `_MCP_PREVIEW` layer. The former direct writer `draw_cad_ugdrillholes` and production `create_cad_layer` both returned `forbidden_unfenced`. The bridge process started for this check was stopped afterward.
 

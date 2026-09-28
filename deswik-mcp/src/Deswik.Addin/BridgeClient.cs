@@ -21,10 +21,12 @@ internal class BridgeClient : IDisposable
     private readonly int _bridgePort;
     private bool _isConnected;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
+    private readonly object _dispatchLock = new();
+    private Task _dispatchTail = Task.CompletedTask;
 
     public event Action<string>? OnLog;
-    /// <summary>Raised for each command from the bridge: (requestId, action, params).</summary>
-    public event Action<string, string, JsonElement>? OnCommand;
+    /// <summary>Raised for each command with the lifetime of its bridge connection.</summary>
+    public event Action<string, string, JsonElement, CancellationToken>? OnCommand;
     /// <summary>Raised when an established connection is lost.</summary>
     public event Action? OnDisconnected;
 
@@ -54,8 +56,11 @@ internal class BridgeClient : IDisposable
 
             Log($"Connected to Bridge at {_bridgeHost}:{_bridgePort}");
 
-            _cts = new CancellationTokenSource();
-            _ = Task.Run(() => ReceiveLoop(_cts.Token));
+            var connection = new CancellationTokenSource();
+            _cts = connection;
+            lock (_dispatchLock) _dispatchTail = Task.CompletedTask;
+            var connectedStream = _stream;
+            _ = Task.Run(() => ReceiveLoop(connection, connectedStream));
 
             // Send registration message
             await SendAsync(new
@@ -142,9 +147,10 @@ internal class BridgeClient : IDisposable
         }
     }
 
-    private async Task ReceiveLoop(CancellationToken ct)
+    private async Task ReceiveLoop(CancellationTokenSource connection, NetworkStream stream)
     {
-        var reader = new StreamReader(_stream!, Encoding.UTF8);
+        var ct = connection.Token;
+        var reader = new StreamReader(stream, Encoding.UTF8);
         var wasConnected = false;
 
         while (!ct.IsCancellationRequested && _isConnected)
@@ -155,7 +161,7 @@ internal class BridgeClient : IDisposable
                 var line = await reader.ReadLineAsync(ct);
                 if (line == null) break;
 
-                Log($"Received: {line}");
+                Log($"Received bridge frame ({Encoding.UTF8.GetByteCount(line)} bytes)");
 
                 var doc = JsonDocument.Parse(line);
                 var root = doc.RootElement;
@@ -166,9 +172,28 @@ internal class BridgeClient : IDisposable
 
                 var action = actionProp.GetString() ?? "";
                 var id = root.TryGetProperty("id", out var i) ? i.GetString() ?? "" : "";
-                var parameters = root.TryGetProperty("params", out var p) ? p : default;
+                var parameters = root.TryGetProperty("params", out var p) ? p.Clone() : default;
 
-                OnCommand?.Invoke(id, action, parameters);
+                // Keep reading the socket while a CAD action waits for the
+                // UI thread. This lets a lost bridge cancel queued writes.
+                if (action == "_job_cancel")
+                {
+                    _ = Task.Run(() =>
+                    {
+                        if (!ct.IsCancellationRequested)
+                            OnCommand?.Invoke(id, action, parameters, ct);
+                    });
+                    continue;
+                }
+                lock (_dispatchLock)
+                {
+                    var previous = _dispatchTail;
+                    _dispatchTail = Task.Run(async () =>
+                    {
+                        try { await previous; } catch { }
+                        if (!ct.IsCancellationRequested) OnCommand?.Invoke(id, action, parameters, ct);
+                    });
+                }
             }
             catch (OperationCanceledException)
             {
@@ -181,8 +206,10 @@ internal class BridgeClient : IDisposable
             }
         }
 
-        var lost = _isConnected && wasConnected && !ct.IsCancellationRequested;
-        _isConnected = false;
+        var current = ReferenceEquals(_cts, connection);
+        var lost = current && _isConnected && wasConnected && !ct.IsCancellationRequested;
+        connection.Cancel();
+        if (current) _isConnected = false;
         Log("Receive loop ended");
         if (lost) OnDisconnected?.Invoke();
     }

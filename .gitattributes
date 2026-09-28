@@ -1,0 +1,7 @@
+# Deswik Process Map files contain length-sensitive payloads and must never
+# be modified by Git line-ending conversion.
+*.ddf -text
+
+# The bridge pins this entry point by SHA256, so checkout must preserve its
+# committed bytes across platforms and Git configurations.
+deswik_pm/sidecar.py -text

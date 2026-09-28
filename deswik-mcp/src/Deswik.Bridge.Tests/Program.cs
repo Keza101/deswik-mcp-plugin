@@ -2,8 +2,13 @@ using System.Text.Json;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Security.Cryptography;
+using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
 using Deswik.Bridge.Models;
 using Deswik.Bridge.Standalone;
+using Deswik.Mcp.Server;
 
 var tests = new (string Name, Func<Task> Run)[]
 {
@@ -19,14 +24,29 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Process Map inspect returns file provenance", TestSidecarInspect),
     ("all legacy CAD writers are fenced", TestWriterFence),
     ("preview layer ownership detects foreign handles", TestPreviewLayerOwnership),
+    ("guarded writes reject source handle additions and removals", TestSourceHandleSet),
+    ("Process Map actions use an exact allowlist", TestProcessMapActionPolicy),
     ("write tokens are opaque bound and single use", TestWriteTokens),
     ("write tokens expire", TestWriteTokenExpiry),
     ("release bridge has one token mint call site", TestSingleMintCallSite),
+    ("job actions use an exact allowlist", TestJobActionAllowlist),
+    ("cancel before commit dispatch writes nothing", TestJobCancelBeforeWrite),
+    ("cancel during a 40-hole commit preserves its complete result", TestJobCancelDuringWrite),
+    ("partial writes report every surviving handle", TestJobPartialWrite),
+    ("expired jobs cancel and restarted registries know no prior IDs", TestJobExpiryAndRestart),
+    ("expired in-flight write never reports cancelled", TestJobDeadlineDuringWrite),
+    ("MCP tool catalogue is exact and typed", TestMcpToolCatalogue),
+    ("MCP refuses unknown and tokenless write tools", TestMcpToolRefusals),
+    ("MCP rejects malformed JSON-RPC without exiting", TestMcpMalformedRequest),
+    ("MCP read tool round-trips the live bridge envelope", TestMcpReadRoundTrip),
+    ("MCP stdio server completes initialize list call and refusals", TestMcpStdioRoundTrip),
 };
 
 try
 {
-    foreach (var test in tests)
+    var filter = args.Length == 2 && args[0] == "--filter" ? args[1] : null;
+    foreach (var test in tests.Where(test => filter == null ||
+                 test.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)))
     {
         await test.Run();
         Console.WriteLine($"PASS {test.Name}");
@@ -197,6 +217,7 @@ static Task TestWriterFence()
         GuardedWritePolicy.InternalApprovalAction,
         GuardedWritePolicy.InternalCommitAction,
         GuardedWritePolicy.InternalRollbackAction,
+        "_job_cancel",
     })
     {
         True(GuardedWritePolicy.RefuseUnfenced(new McpCommand
@@ -215,6 +236,33 @@ static Task TestPreviewLayerOwnership()
         "foreign preview handle was accepted");
     True(GuardedWritePolicy.PreviewLayerIsDirty(new ulong[] { 10 }, Array.Empty<ulong>()),
         "stale preview survived an empty process record");
+    return Task.CompletedTask;
+}
+
+static Task TestSourceHandleSet()
+{
+    var recorded = new ulong[] { 30, 10, 20 };
+    True(GuardedWriteSourcePolicy.HandleSetMatches(recorded, new ulong[] { 20, 30, 10 }),
+        "unchanged handles in a different enumeration order were rejected");
+    False(GuardedWriteSourcePolicy.HandleSetMatches(recorded, new ulong[] { 10, 20, 30, 40 }),
+        "a source handle added after preview was accepted");
+    False(GuardedWriteSourcePolicy.HandleSetMatches(recorded, new ulong[] { 10, 30 }),
+        "a source handle removed after preview was accepted");
+    return Task.CompletedTask;
+}
+
+static Task TestProcessMapActionPolicy()
+{
+    True(ProcessMapActionPolicy.TryGetAction(
+            ProcessMapActionPolicy.ReadDocumentCommand, out var action),
+        "approved Process Map command was refused");
+    Equal(ProcessMapActionPolicy.ReadDocumentAction, action);
+    False(ProcessMapActionPolicy.TryGetAction("MCP_READ_DOCUMENT_EXTRA", out _),
+        "prefix extension bypassed the Process Map allowlist");
+    False(ProcessMapActionPolicy.TryGetAction("mcp_read_document", out _),
+        "Process Map command matching was normalized");
+    False(ProcessMapActionPolicy.TryGetAction("cmd.exe", out _),
+        "executable text was accepted as a Process Map command");
     return Task.CompletedTask;
 }
 
@@ -264,6 +312,318 @@ static Task TestSingleMintCallSite()
         .Sum(method => CountCalls(method, target));
     Equal(1, count);
     return Task.CompletedTask;
+}
+
+static Task TestJobActionAllowlist()
+{
+    True(BridgeJobPolicy.CanSubmit(GuardedWritePolicy.CommitAction), "guarded commit was excluded");
+    True(BridgeJobPolicy.CanSubmit("get_cad_elements"), "long read was excluded");
+    True(BridgeJobPolicy.CanSubmit("get_cad_layer_attributes"), "attribute read was excluded");
+    False(BridgeJobPolicy.CanSubmit("draw_cad_ugdrillholes"), "unfenced writer was accepted");
+    False(BridgeJobPolicy.CanSubmit("register_addin"), "registration was accepted as a job");
+    False(BridgeJobPolicy.CanSubmit("commit_ugdrillholes_extra"), "suffix bypassed allowlist");
+    return Task.CompletedTask;
+}
+
+static async Task TestJobCancelBeforeWrite()
+{
+    var jobs = new BridgeJobs();
+    var running = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    var wrote = false;
+    var job = jobs.Submit(GuardedWritePolicy.CommitAction, TimeSpan.FromMinutes(1),
+        async (id, _) =>
+        {
+            running.SetResult();
+            await release.Task;
+            if (jobs.TryStartWrite(id)) wrote = true;
+            return McpResponse.Ok(id);
+        });
+    await running.Task.WaitAsync(TimeSpan.FromSeconds(5));
+    Equal("cancelled", jobs.Cancel(job.JobId)!.State);
+    release.SetResult();
+    await Task.Delay(30);
+    False(wrote, "cancelled job dispatched a production write");
+    Equal("cancelled", jobs.Get(job.JobId)!.State);
+    Equal("cancelled", jobs.Cancel(job.JobId)!.State);
+}
+
+static async Task TestJobCancelDuringWrite()
+{
+    var jobs = new BridgeJobs();
+    string? cancellationSignal = null;
+    var cancellationSignals = 0;
+    jobs.WriteCancellationRequested += id =>
+    {
+        cancellationSignal = id;
+        cancellationSignals++;
+    };
+    var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    var handles = Enumerable.Range(100, 40).Select(i => (ulong)i).ToArray();
+    var job = jobs.Submit(GuardedWritePolicy.CommitAction, TimeSpan.FromMinutes(1),
+        async (id, _) =>
+        {
+            True(jobs.TryStartWrite(id), "write could not start");
+            for (var i = 0; i < 20; i++) jobs.ReportProgress(id, i + 1, 40, handles[i]);
+            started.SetResult();
+            await release.Task;
+            for (var i = 20; i < 40; i++) jobs.ReportProgress(id, i + 1, 40, handles[i]);
+            return McpResponse.Ok(id, new { handles });
+        });
+    await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+    Equal(20, jobs.Get(job.JobId)!.CompletedUnits);
+    Equal(20, jobs.Get(job.JobId)!.Handles.Count);
+    var cancelling = jobs.Cancel(job.JobId)!;
+    Equal("running", cancelling.State);
+    True(cancelling.CancelRequested, "cancel request was lost");
+    Equal(job.JobId, cancellationSignal);
+    release.SetResult();
+    await WaitForJob(jobs, job.JobId, "completed");
+    var finished = jobs.Get(job.JobId)!;
+    Equal(40, finished.Handles.Count);
+    True(finished.Handles.SequenceEqual(handles), "job record omitted a created handle");
+    Equal("completed", jobs.Cancel(job.JobId)!.State);
+    Equal(1, cancellationSignals);
+}
+
+static async Task TestJobPartialWrite()
+{
+    var jobs = new BridgeJobs();
+    var job = jobs.Submit(GuardedWritePolicy.CommitAction, TimeSpan.FromMinutes(1),
+        (id, _) =>
+        {
+            True(jobs.TryStartWrite(id), "write could not start");
+            var failure = McpResponse.Fail(id, "two surviving holes", "partial_write");
+            failure.Data = new { handles = new ulong[] { 11, 12 } };
+            return Task.FromResult(failure);
+        });
+    await WaitForJob(jobs, job.JobId, "partial");
+    var result = jobs.Get(job.JobId)!;
+    Equal("partial_write", result.ErrorCode);
+    True(result.Handles.SequenceEqual(new ulong[] { 11, 12 }), "partial handles were not retained");
+    False(result.State == "cancelled", "partial write was reported cancelled");
+}
+
+static async Task TestJobExpiryAndRestart()
+{
+    var jobs = new BridgeJobs();
+    var job = jobs.Submit("get_cad_elements", TimeSpan.FromSeconds(1),
+        async (id, ct) =>
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+            return McpResponse.Ok(id);
+        });
+    await WaitForJob(jobs, job.JobId, "cancelled", TimeSpan.FromSeconds(4));
+    Equal("job_expired", jobs.Get(job.JobId)!.ErrorCode);
+    True(new BridgeJobs().Get(job.JobId) == null, "a restarted bridge retained old job state");
+}
+
+static async Task TestJobDeadlineDuringWrite()
+{
+    var jobs = new BridgeJobs();
+    var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    var job = jobs.Submit(GuardedWritePolicy.CommitAction, TimeSpan.FromSeconds(1),
+        async (id, _) =>
+        {
+            True(jobs.TryStartWrite(id), "write could not start");
+            jobs.ReportProgress(id, 1, 40, 77);
+            started.SetResult();
+            await release.Task;
+            return McpResponse.Ok(id, new { handles = new ulong[] { 77 } });
+        });
+    await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+    await WaitForJob(jobs, job.JobId, "partial", TimeSpan.FromSeconds(4));
+    var expired = jobs.Get(job.JobId)!;
+    False(expired.State == "cancelled", "in-flight write was reported cancelled");
+    Equal("job_deadline_write_unknown", expired.ErrorCode);
+    release.SetResult();
+    await WaitForJob(jobs, job.JobId, "completed");
+    True(jobs.Get(job.JobId)!.Handles.SequenceEqual(new ulong[] { 77 }),
+        "late commit result did not resolve the partial state");
+}
+
+static Task TestMcpToolCatalogue()
+{
+    var names = McpToolCatalog.Tools.Select(tool => tool.Name).ToArray();
+    Equal(20, names.Length);
+    Equal(names.Length, names.Distinct(StringComparer.Ordinal).Count());
+    True(names.Contains("get_cad_document"), "CAD reads are missing");
+    True(names.Contains("commit_ugdrillholes"), "guarded commit is missing");
+    True(names.Contains("job.submit"), "async jobs are missing");
+    True(names.Contains("map.inspect"), "read-only Process Map inspection is missing");
+    False(names.Contains("map.generate"), "file-producing map.generate was exposed");
+    False(names.Contains("map.install"), "production map.install was exposed");
+    False(names.Contains("draw_cad_ugdrillholes"), "legacy writer was exposed");
+    False(names.Any(name => name.StartsWith("_", StringComparison.Ordinal)), "internal action was exposed");
+    foreach (var tool in McpToolCatalog.Tools)
+    {
+        var json = JsonSerializer.SerializeToElement(tool.InputSchema);
+        Equal("object", json.GetProperty("type").GetString());
+    }
+    return Task.CompletedTask;
+}
+
+static async Task TestMcpToolRefusals()
+{
+    var bridge = new RecordingBridgeClient();
+    var adapter = new McpAdapter(bridge);
+    using var unknown = JsonDocument.Parse((await adapter.ProcessLineAsync(
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"draw_cad_ugdrillholes\",\"arguments\":{}}}"))!);
+    Equal(-32602, unknown.RootElement.GetProperty("error").GetProperty("code").GetInt32());
+    Equal(0, bridge.Calls.Count);
+
+    using var tokenless = JsonDocument.Parse((await adapter.ProcessLineAsync(
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"commit_ugdrillholes\",\"arguments\":{}}}"))!);
+    True(tokenless.RootElement.GetProperty("result").GetProperty("isError").GetBoolean(),
+        "tokenless write did not return a tool error");
+    Equal("human_token_required", tokenless.RootElement.GetProperty("result")
+        .GetProperty("structuredContent").GetProperty("errorCode").GetString());
+    Equal(0, bridge.Calls.Count);
+
+    using var tokenlessJob = JsonDocument.Parse((await adapter.ProcessLineAsync(
+        "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"job.submit\",\"arguments\":{\"action\":\"commit_ugdrillholes\",\"args\":{}}}}"))!);
+    True(tokenlessJob.RootElement.GetProperty("result").GetProperty("isError").GetBoolean(),
+        "tokenless async write did not return a tool error");
+    Equal(0, bridge.Calls.Count);
+}
+
+static async Task TestMcpMalformedRequest()
+{
+    var adapter = new McpAdapter(new RecordingBridgeClient());
+    using var array = JsonDocument.Parse((await adapter.ProcessLineAsync("[]"))!);
+    Equal(-32600, array.RootElement.GetProperty("error").GetProperty("code").GetInt32());
+    using var wrongVersion = JsonDocument.Parse((await adapter.ProcessLineAsync(
+        "{\"jsonrpc\":\"1.0\",\"id\":9,\"method\":\"tools/list\"}"))!);
+    Equal(-32600, wrongVersion.RootElement.GetProperty("error").GetProperty("code").GetInt32());
+}
+
+static async Task TestMcpReadRoundTrip()
+{
+    var bridge = new RecordingBridgeClient();
+    var adapter = new McpAdapter(bridge);
+    using var initialized = JsonDocument.Parse((await adapter.ProcessLineAsync(
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"test\",\"version\":\"1\"}}}"))!);
+    Equal(McpAdapter.ProtocolVersion, initialized.RootElement.GetProperty("result").GetProperty("protocolVersion").GetString());
+
+    using var listed = JsonDocument.Parse((await adapter.ProcessLineAsync(
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}"))!);
+    Equal(20, listed.RootElement.GetProperty("result").GetProperty("tools").GetArrayLength());
+
+    using var called = JsonDocument.Parse((await adapter.ProcessLineAsync(
+        "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"get_cad_document\",\"arguments\":{}}}"))!);
+    False(called.RootElement.GetProperty("result").GetProperty("isError").GetBoolean(), "read tool failed");
+    Equal("live", called.RootElement.GetProperty("result").GetProperty("structuredContent").GetProperty("mode").GetString());
+    Equal("get_cad_document", bridge.Calls.Single());
+}
+
+static async Task TestMcpStdioRoundTrip()
+{
+    var listener = new TcpListener(IPAddress.Loopback, 0);
+    listener.Start();
+    var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+    var bridgeTask = Task.Run(async () =>
+    {
+        using var client = await listener.AcceptTcpClientAsync();
+        await using var stream = client.GetStream();
+        using var reader = new StreamReader(stream, new UTF8Encoding(false), false, leaveOpen: true);
+        using var writer = new StreamWriter(stream, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
+        var line = await reader.ReadLineAsync();
+        True(line != null, "MCP adapter sent no bridge request");
+        using var request = JsonDocument.Parse(line!);
+        Equal("get_cad_document", request.RootElement.GetProperty("action").GetString());
+        Equal("live", request.RootElement.GetProperty("mode").GetString());
+        var id = request.RootElement.GetProperty("id").GetString();
+        await writer.WriteLineAsync(JsonSerializer.Serialize(new
+        {
+            id, mode = "live", success = true,
+            data = new { DocumentName = "Disposable Test Drawing" },
+        }));
+    });
+
+    var serverPath = Path.Combine(AppContext.BaseDirectory, "Deswik.Mcp.Server.exe");
+    True(File.Exists(serverPath), $"MCP server executable missing: {serverPath}");
+    using var process = new Process
+    {
+        StartInfo = new ProcessStartInfo(serverPath)
+        {
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        },
+    };
+    process.StartInfo.Environment["DESWIK_BRIDGE_PORT"] = port.ToString();
+    True(process.Start(), "MCP server did not start");
+    var transcript = new List<(string Request, string Response)>();
+
+    async Task<JsonDocument> Exchange(string request)
+    {
+        await process.StandardInput.WriteLineAsync(request);
+        await process.StandardInput.FlushAsync();
+        string? response;
+        try
+        {
+            response = await process.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        catch
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            throw;
+        }
+        True(response != null, "MCP server returned no stdio response");
+        transcript.Add((request, response!));
+        return JsonDocument.Parse(response!);
+    }
+
+    using var initialized = await Exchange(
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"stdio-test\",\"version\":\"1\"}}}");
+    Equal(McpAdapter.ProtocolVersion, initialized.RootElement.GetProperty("result").GetProperty("protocolVersion").GetString());
+    using var listed = await Exchange(
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}");
+    var tools = listed.RootElement.GetProperty("result").GetProperty("tools");
+    Equal(20, tools.GetArrayLength());
+    True(tools[0].TryGetProperty("name", out _), "tools/list did not use MCP field casing");
+    True(tools[0].TryGetProperty("inputSchema", out _), "tools/list omitted inputSchema");
+
+    using var unknown = await Exchange(
+        "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"draw_cad_ugdrillholes\",\"arguments\":{}}}");
+    Equal(-32602, unknown.RootElement.GetProperty("error").GetProperty("code").GetInt32());
+    using var tokenless = await Exchange(
+        "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"commit_ugdrillholes\",\"arguments\":{}}}");
+    True(tokenless.RootElement.GetProperty("result").GetProperty("isError").GetBoolean(), "stdio tokenless write was accepted");
+    using var called = await Exchange(
+        "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"get_cad_document\",\"arguments\":{}}}");
+    Equal("Disposable Test Drawing", called.RootElement.GetProperty("result").GetProperty("structuredContent")
+        .GetProperty("data").GetProperty("DocumentName").GetString());
+
+    await bridgeTask.WaitAsync(TimeSpan.FromSeconds(5));
+    process.StandardInput.Close();
+    await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+    listener.Stop();
+    Equal(0, process.ExitCode);
+    if (Environment.GetEnvironmentVariable("DESWIK_MCP_TRACE") == "1")
+    {
+        foreach (var frame in transcript)
+        {
+            Console.WriteLine($"MCP> {frame.Request}");
+            Console.WriteLine($"MCP< {frame.Response}");
+        }
+    }
+}
+
+static async Task WaitForJob(BridgeJobs jobs, string id, string state,
+    TimeSpan? timeout = null)
+{
+    var until = DateTimeOffset.UtcNow + (timeout ?? TimeSpan.FromSeconds(5));
+    while (DateTimeOffset.UtcNow < until)
+    {
+        if (jobs.Get(id)?.State == state) return;
+        await Task.Delay(10);
+    }
+    throw new InvalidOperationException($"job {id} did not reach {state}; got {jobs.Get(id)?.State}");
 }
 
 static WriteBinding Binding(string documentGuid, string sourceFingerprint) => new(
@@ -349,4 +709,20 @@ sealed class TestClock : TimeProvider
     public TestClock(DateTimeOffset now) => _now = now;
     public override DateTimeOffset GetUtcNow() => _now;
     public void Advance(TimeSpan duration) => _now += duration;
+}
+
+sealed class RecordingBridgeClient : IBridgeClient
+{
+    public List<string> Calls { get; } = new();
+
+    public Task<JsonElement> InvokeAsync(
+        string action, JsonElement arguments, CancellationToken cancellationToken)
+    {
+        Calls.Add(action);
+        return Task.FromResult(JsonSerializer.SerializeToElement(new
+        {
+            id = "bridge-test", mode = "live", success = true,
+            data = new { DocumentName = "Disposable Test Drawing" },
+        }));
+    }
 }

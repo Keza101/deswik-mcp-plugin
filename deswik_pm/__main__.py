@@ -288,6 +288,66 @@ def cmd_draw(args):
     return 0
 
 
+def cmd_plugin_test(args):
+    """Generate the fixed Phase 5 in-process macro acceptance map."""
+    out = Path(args.out) if args.out else DEFAULT_OUT_DIR / "_TEST_Phase 5 In-Process Bridge.ddf"
+    out = _check_output_path(out, args.force)
+    builder = _load_builder(args.donor)
+
+    def action_macro(command_id: str) -> str:
+        return f"""'#Language "WWB.NET"
+
+Imports System
+Imports System.Reflection
+
+Sub Main
+    Dim loadedAssembly As Assembly
+    For Each loadedAssembly In AppDomain.CurrentDomain.GetAssemblies()
+        If String.Equals(loadedAssembly.GetName().Name, "Deswik.Addin", StringComparison.Ordinal) Then
+            Dim actionType As Type = loadedAssembly.GetType("Deswik.Addin.ProcessMapActions", False)
+            If actionType Is Nothing Then
+                MsgBox("The loaded Deswik MCP Bridge does not expose Process Map actions.")
+                Exit Sub
+            End If
+            Dim arguments(0) As Object
+            arguments(0) = "{command_id}"
+            actionType.GetMethod("Run").Invoke(Nothing, arguments)
+            Exit Sub
+        End If
+    Next
+    MsgBox("The Deswik MCP Bridge add-in is not loaded.")
+End Sub
+"""
+
+    builder.add_node(
+        "Read current drawing through MCP bridge",
+        name="MCP Read Document",
+        commands=[EmbeddedMacro(action_macro("MCP_READ_DOCUMENT"))],
+        tooltip="Calls one fixed action on the already-loaded add-in; starts no process.",
+    )
+    builder.add_node(
+        "Refusal test: unknown MCP command",
+        name="MCP Refusal Test",
+        commands=[EmbeddedMacro(action_macro("MCP_NOT_ALLOWED"))],
+        tooltip="Must show an operator-visible refusal and make no drawing change.",
+    )
+    builder.save(out)
+    data = {
+        "file": str(out),
+        "output_path": str(out),
+        "entryPoint": "Deswik.Addin.ProcessMapActions.Run",
+        "approvedCommand": "MCP_READ_DOCUMENT",
+        "refusalCommand": "MCP_NOT_ALLOWED",
+        "warnings": ["Generated test maps require manual validation inside Deswik.CAD."],
+    }
+    if args.json:
+        _print(data, True)
+    else:
+        print(f"saved {out}")
+        print("Manual validation required: run both nodes in Deswik.CAD.")
+    return 0
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -511,6 +571,14 @@ def build_parser():
     pd.add_argument("--force", action="store_true")
     pd.add_argument("--json", action="store_true")
     pd.set_defaults(func=cmd_draw)
+
+    p_plugin = sub.add_parser(
+        "plugin-test", help="generate the fixed Phase 5 in-process bridge test map")
+    p_plugin.add_argument("--out")
+    p_plugin.add_argument("--donor", help="donor .ddf for the container")
+    p_plugin.add_argument("--force", action="store_true")
+    p_plugin.add_argument("--json", action="store_true")
+    p_plugin.set_defaults(func=cmd_plugin_test)
 
     pin = sub.add_parser("install", help="install a test-prefixed map without overwriting")
     pin.add_argument("source")

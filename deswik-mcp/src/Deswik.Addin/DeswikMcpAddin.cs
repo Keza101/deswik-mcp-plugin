@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -35,6 +36,7 @@ public class DeswikMcpAddin
     private CadReader? _cadReader;
     private Deswik.Graphics.Application? _cadApplication;
     private GuardedWriteCoordinator? _guardedWrites;
+    private readonly ConcurrentDictionary<string, byte> _cancelledJobs = new(StringComparer.Ordinal);
     private CancellationTokenSource? _cts;
     private SynchronizationContext? _uiContext;
     private McpStatusControl? _statusControl;
@@ -225,6 +227,7 @@ public class DeswikMcpAddin
     private void OnBridgeDisconnected()
     {
         if (!_isLoaded || _cts == null) return;
+        _cancelledJobs.Clear();
         Log("Bridge connection lost - reconnecting...");
         var ct = _cts.Token;
         _ = Task.Run(async () =>
@@ -240,7 +243,8 @@ public class DeswikMcpAddin
         });
     }
 
-    private void OnBridgeCommand(string id, string action, System.Text.Json.JsonElement parameters)
+    private void OnBridgeCommand(string id, string action,
+        System.Text.Json.JsonElement parameters, CancellationToken connection)
     {
         try
         {
@@ -250,6 +254,12 @@ public class DeswikMcpAddin
 
             switch (action)
             {
+                case "_job_cancel":
+                    if (parameters.TryGetProperty("jobId", out var cancelledJob) &&
+                        cancelledJob.ValueKind == System.Text.Json.JsonValueKind.String &&
+                        cancelledJob.GetString() is { } cancelledId)
+                        _cancelledJobs[cancelledId] = 0;
+                    break;
                 case "get_schedule_info":
                     HandleGetScheduleInfo(id);
                     break;
@@ -323,10 +333,10 @@ public class DeswikMcpAddin
                     HandlePrepareRollback(id, parameters);
                     break;
                 case "_commit_ugdrillholes_authorized":
-                    HandleAuthorizedCommit(id, parameters);
+                    HandleAuthorizedCommit(id, parameters, connection);
                     break;
                 case "_rollback_ugdrillholes_authorized":
-                    HandleAuthorizedRollback(id, parameters);
+                    HandleAuthorizedRollback(id, parameters, connection);
                     break;
                 case "send_hello":
                     HandleSendHello(id);
@@ -340,12 +350,20 @@ public class DeswikMcpAddin
         catch (GuardedWriteException ex)
         {
             Log($"Guarded write refused {action}: {ex.Message}");
-            SendError(id, action, ex.Message, ex.ErrorCode);
+            if (connection.IsCancellationRequested) return;
+            if (ex.ErrorCode == "partial_write")
+                _bridgeClient?.SendAsync(new
+                {
+                    id, action = action + "_result", error = ex.Message,
+                    errorCode = ex.ErrorCode,
+                    data = new { ex.CommitId, handles = ex.SurvivingHandles }
+                });
+            else SendError(id, action, ex.Message, ex.ErrorCode);
         }
         catch (Exception ex)
         {
             Log($"Error handling command {action}: {ex}");
-            SendError(id, action, ex.Message);
+            if (!connection.IsCancellationRequested) SendError(id, action, ex.Message);
         }
     }
 
@@ -666,11 +684,35 @@ public class DeswikMcpAddin
         }).GetAwaiter().GetResult();
     }
 
-    private void HandleAuthorizedCommit(string id, System.Text.Json.JsonElement parameters)
+    private void HandleAuthorizedCommit(string id, System.Text.Json.JsonElement parameters,
+        CancellationToken connection)
     {
         var binding = ParseBinding(parameters);
-        var result = OnUiThread(() => RequireGuardedWrites().Commit(binding));
-        _bridgeClient?.SendAsync(new { id, action = "commit_ugdrillholes_result", data = result });
+        var isJob = parameters.TryGetProperty("JobId", out var jobId) &&
+            jobId.ValueKind == System.Text.Json.JsonValueKind.String;
+        var jobIdText = isJob ? jobId.GetString() : null;
+        Action<int, int, ulong>? progress = isJob
+            ? (completed, total, handle) => _bridgeClient?.SendAsync(new
+              {
+                  id, action = "job_progress", data = new { completed, total, handle }
+              }).GetAwaiter().GetResult()
+            : null;
+        try
+        {
+            var result = OnUiThread(() =>
+            {
+                connection.ThrowIfCancellationRequested();
+                if (jobIdText != null && _cancelledJobs.ContainsKey(jobIdText))
+                    throw new GuardedWriteException("job_cancelled", "Job cancelled before commit began");
+                return RequireGuardedWrites().Commit(binding, progress);
+            });
+            if (!connection.IsCancellationRequested)
+                _bridgeClient?.SendAsync(new { id, action = "commit_ugdrillholes_result", data = result });
+        }
+        finally
+        {
+            if (jobIdText != null) _cancelledJobs.TryRemove(jobIdText, out _);
+        }
     }
 
     private void HandlePrepareRollback(string id, System.Text.Json.JsonElement parameters)
@@ -699,11 +741,28 @@ public class DeswikMcpAddin
         }).GetAwaiter().GetResult();
     }
 
-    private void HandleAuthorizedRollback(string id, System.Text.Json.JsonElement parameters)
+    private void HandleAuthorizedRollback(string id, System.Text.Json.JsonElement parameters,
+        CancellationToken connection)
     {
         var binding = ParseBinding(parameters);
-        var result = OnUiThread(() => RequireGuardedWrites().Rollback(binding));
-        _bridgeClient?.SendAsync(new { id, action = "rollback_ugdrillholes_result", data = result });
+        var jobIdText = parameters.TryGetProperty("JobId", out var jobId) &&
+            jobId.ValueKind == System.Text.Json.JsonValueKind.String ? jobId.GetString() : null;
+        try
+        {
+            var result = OnUiThread(() =>
+            {
+                connection.ThrowIfCancellationRequested();
+                if (jobIdText != null && _cancelledJobs.ContainsKey(jobIdText))
+                    throw new GuardedWriteException("job_cancelled", "Job cancelled before rollback began");
+                return RequireGuardedWrites().Rollback(binding);
+            });
+            if (!connection.IsCancellationRequested)
+                _bridgeClient?.SendAsync(new { id, action = "rollback_ugdrillholes_result", data = result });
+        }
+        finally
+        {
+            if (jobIdText != null) _cancelledJobs.TryRemove(jobIdText, out _);
+        }
     }
 
     private static List<UGHoleSpec> ParseGuardedHoles(System.Text.Json.JsonElement parameters)
