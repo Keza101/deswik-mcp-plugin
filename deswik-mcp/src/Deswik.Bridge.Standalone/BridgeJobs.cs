@@ -215,7 +215,8 @@ public static class BridgeJobPolicy
     private static readonly HashSet<string> Allowed = new(StringComparer.Ordinal)
     {
         "get_cad_document", "get_cad_layers", "get_cad_layer_attributes",
-        "get_cad_elements", "get_cad_selection", "get_cad_polyface_info",
+        "get_cad_elements", "get_cad_selection", "get_ug_selection_context", "get_cad_polyface_info",
+        "get_cad_polyface_geometry", "get_cad_polyline_geometry",
         "get_cad_polylines_under",
         "get_cad_blasthole_details", "get_cad_ugdrillhole_details",
         GuardedWritePolicy.CommitAction, GuardedWritePolicy.RollbackAction,

@@ -9,6 +9,9 @@ using System.Text;
 using Deswik.Bridge.Models;
 using Deswik.Bridge.Standalone;
 using Deswik.Mcp.Server;
+using Deswik.Ug.Design.Profiles;
+using Deswik.Ug.Design;
+using Deswik.Addin;
 
 var tests = new (string Name, Func<Task> Run)[]
 {
@@ -40,6 +43,12 @@ var tests = new (string Name, Func<Task> Run)[]
     ("MCP rejects malformed JSON-RPC without exiting", TestMcpMalformedRequest),
     ("MCP read tool round-trips the live bridge envelope", TestMcpReadRoundTrip),
     ("MCP stdio server accepts a BOM and completes initialize list call and refusals", TestMcpStdioRoundTrip),
+    ("synthetic profiles round-trip and reject invalid or production claims", TestSyntheticProfiles),
+    ("profile save-as creates a distinct JSON file without changing the starter", TestProfileSaveAs),
+    ("selected design snapshot preserves handles and refuses inferred roles", TestSelectionContext),
+    ("operator roles and polyface metrics stay explicit and read-only", TestOperatorRoleContext),
+    ("polyface geometry pages are bounded and preserve raw face indexes", TestPolyfaceGeometryPaging),
+    ("polyline geometry pages preserve closed state and boundaries", TestPolylineGeometryPaging),
 };
 
 try
@@ -67,6 +76,197 @@ static Task TestEnvelopeMode()
     using var doc = JsonDocument.Parse(json);
     Equal(McpResponseMode.Live, doc.RootElement.GetProperty("mode").GetString());
     True(doc.RootElement.GetProperty("success").GetBoolean(), "success should remain independent of mode");
+    return Task.CompletedTask;
+}
+
+static Task TestSyntheticProfiles()
+{
+    var starter = ProfileJson.Starter();
+    Equal("synthetic-starter", starter.ProfileId);
+    Equal(ProfileJson.SyntheticBasis, starter.Basis);
+    starter.Name = "Edited synthetic ring";
+    starter.Ring.ToeSpacingM = 2.4;
+    var saved = ProfileJson.CopyAsNew(starter);
+    Equal(1, saved.Revision);
+    False(saved.ProfileId == starter.ProfileId, "saving a copy reused the starter ID");
+    Equal(ProfileJson.SyntheticBasis, saved.Basis);
+    var reloaded = ProfileJson.Parse(ProfileJson.Serialize(saved));
+    Equal(saved.ProfileId, reloaded.ProfileId);
+    Equal(2.4, reloaded.Ring.ToeSpacingM);
+
+    var invalid = ProfileJson.Starter();
+    invalid.Ring.MinHoleSeparationM = invalid.Ring.ToeSpacingM + 1;
+    try { ProfileJson.Serialize(invalid); throw new Exception("invalid spacing was saved"); }
+    catch (ArgumentException) { }
+
+    var claimedApproved = ProfileJson.Serialize(saved).Replace(ProfileJson.SyntheticBasis, "approved");
+    try { ProfileJson.Parse(claimedApproved); throw new Exception("unapproved profile claimed approval"); }
+    catch (ArgumentException) { }
+    return Task.CompletedTask;
+}
+
+static Task TestProfileSaveAs()
+{
+    var tempRoot = Path.GetFullPath(Path.GetTempPath());
+    var directory = Path.Combine(tempRoot, "deswik-profile-test-" + Guid.NewGuid().ToString("N"));
+    try
+    {
+        var starter = ProfileJson.Starter();
+        starter.Name = "Edited / synthetic ring";
+        starter.Ring.BurdenM = 2.1;
+        var first = ProfileFiles.SaveNew(starter, directory);
+        True(File.Exists(first.Path), "new profile file is missing");
+        False(first.Profile.ProfileId == starter.ProfileId, "starter ID was reused");
+        var loaded = ProfileFiles.Load(first.Path);
+        Equal(2.1, loaded.Ring.BurdenM);
+        Equal(ProfileJson.SyntheticBasis, loaded.Basis);
+        var second = ProfileFiles.SaveNew(loaded, directory);
+        False(first.Path == second.Path, "save-as overwrote an existing profile");
+        Equal(2, Directory.EnumerateFiles(directory, "*.json").Count());
+        loaded.Ring.MinHoleSeparationM = loaded.Ring.ToeSpacingM + 1;
+        try { ProfileFiles.SaveNew(loaded, directory); throw new Exception("invalid profile created a file"); }
+        catch (ArgumentException) { }
+        Equal(2, Directory.EnumerateFiles(directory, "*.json").Count());
+        Equal("synthetic-starter", ProfileJson.Starter().ProfileId);
+    }
+    finally
+    {
+        var full = Path.GetFullPath(directory);
+        if (!full.StartsWith(tempRoot, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Test cleanup escaped the temporary directory");
+        if (Directory.Exists(full)) Directory.Delete(full, recursive: true);
+    }
+    return Task.CompletedTask;
+}
+
+static Task TestSelectionContext()
+{
+    var snapshot = SelectionContext.FromSelection(@"C:\drawings\disposable.duf", false,
+        new[]
+        {
+            new SelectedFigure(42, "g42", "Polyface", "STOPE", null),
+            new SelectedFigure(7, "g7", "Polyline", "BROW", null),
+        });
+    Equal(1, snapshot.SchemaVersion);
+    True(snapshot.SourceHandles.SequenceEqual(new ulong[] { 7, 42 }), "source handles were not sorted");
+    False(snapshot.ReadyForDesign, "unclassified selection was marked design-ready");
+    Equal("unknown", snapshot.CoordinateSystem);
+    Equal("unknown", snapshot.Units);
+    True(snapshot.Figures.All(figure => figure.Role == "unclassified"), "CAD layer was treated as a mining role");
+    using var json = JsonDocument.Parse(JsonSerializer.Serialize(snapshot));
+    Equal("unclassified", json.RootElement.GetProperty("figures")[0].GetProperty("role").GetString());
+    Equal(7UL, json.RootElement.GetProperty("sourceHandles")[0].GetUInt64());
+    var empty = SelectionContext.FromSelection("", false, Array.Empty<SelectedFigure>());
+    True(empty.Warnings.Count >= 2, "missing selection or drawing identity was not reported");
+    try
+    {
+        SelectionContext.FromSelection("saved.duf", false, new[]
+        {
+            new SelectedFigure(7, "first", "Line", null, null),
+            new SelectedFigure(7, "second", "Line", null, null),
+        });
+        throw new Exception("duplicate source handle was accepted");
+    }
+    catch (ArgumentException) { }
+    return Task.CompletedTask;
+}
+
+static Task TestOperatorRoleContext()
+{
+    using var requestJson = JsonDocument.Parse(
+        "{\"roles\":{\"0x670\":\"stope\",\"1658\":\"drive\"},\"includePolyfaceMetrics\":true}");
+    var request = SelectionContextRequest.Parse(requestJson.RootElement);
+    var context = SelectionContext.FromSelection(@"C:\drawings\disposable.duf", false,
+        new[]
+        {
+            new SelectedFigure(1658, "g2", "Polyface", "0", null, null),
+            new SelectedFigure(1648, "g1", "Polyface", "0", null,
+                new PolyfaceMetrics(new Point3(1, 2, 3), 100, 24)),
+        }, request);
+    True(context.SourceHandles.SequenceEqual(new ulong[] { 1648, 1658 }), "role mapping changed source handle order");
+    Equal("stope", context.Figures[0].Role);
+    Equal("operator", context.Figures[0].RoleSource);
+    Equal(24, context.Figures[0].PolyfaceMetrics!.VertexCount);
+    Equal("drive", context.Figures[1].Role);
+    True(context.Warnings.Any(warning => warning.Contains("1658", StringComparison.Ordinal)),
+        "missing polyface metrics were not reported");
+    False(context.ReadyForDesign, "operator labels made context design-ready");
+    using var json = JsonDocument.Parse(JsonSerializer.Serialize(context));
+    Equal("operator", json.RootElement.GetProperty("figures")[0].GetProperty("roleSource").GetString());
+    Equal(100.0, json.RootElement.GetProperty("figures")[0]
+        .GetProperty("polyfaceMetrics").GetProperty("volume").GetDouble());
+
+    foreach (var invalid in new[]
+    {
+        "{\"roles\":{\"0x670\":\"stope\",\"1648\":\"drive\"}}",
+        "{\"roles\":{\"0x670\":\"invented\"}}",
+        "{\"roles\":{\"670\":\"stope\"},\"includePolyfaceMetrics\":\"yes\"}",
+    })
+    {
+        using var document = JsonDocument.Parse(invalid);
+        try { SelectionContextRequest.Parse(document.RootElement); throw new Exception("invalid role request passed"); }
+        catch (ArgumentException) { }
+    }
+    using var unknownJson = JsonDocument.Parse("{\"roles\":{\"999\":\"stope\"}}");
+    var unknown = SelectionContextRequest.Parse(unknownJson.RootElement);
+    try
+    {
+        SelectionContext.FromSelection("saved.duf", false,
+            new[] { new SelectedFigure(1648, "g1", "Polyface", "0", null) }, unknown);
+        throw new Exception("unselected role handle was accepted");
+    }
+    catch (ArgumentException) { }
+    return Task.CompletedTask;
+}
+
+static Task TestPolyfaceGeometryPaging()
+{
+    using var json = JsonDocument.Parse("{\"handle\":\"0x670\",\"start\":500,\"limit\":500}");
+    var request = GeometryPageRequest.Parse(json.RootElement);
+    Equal(1648UL, request.Handle);
+    Equal(500, request.CountFor(1200));
+    Equal(100, request.CountFor(600));
+    Equal(1000, request.NextStart(1200, 600));
+    Equal(null, new GeometryPageRequest(1648, 1000, 500).NextStart(1200, 600));
+    Equal(0, new GeometryPageRequest(1648, 1200, 500).CountFor(1200));
+    Equal(0, new GeometryPageRequest(1648, 1500, 500).CountFor(1200));
+    Equal(null, new GeometryPageRequest(1648, 1500, 500).NextStart(1200, 600));
+    var page = new PolyfaceGeometryPage(1, 1648, 0, 1, 3, 1,
+        new[] { new Point3(0, 0, 0) }, new[] { new FaceIndices(0, 1, 2, 0) },
+        1, "Deswik.GetFaceIndexes (raw)", "unknown", "unknown", false);
+    using var serialized = JsonDocument.Parse(JsonSerializer.Serialize(page));
+    Equal(2, serialized.RootElement.GetProperty("faces")[0].GetProperty("c").GetInt32());
+    False(serialized.RootElement.GetProperty("readyForDesign").GetBoolean(),
+        "raw topology was promoted to design-ready geometry");
+    foreach (var invalid in new[]
+    {
+        "{\"handle\":0}", "{\"handle\":\"0x0\"}", "{\"handle\":7,\"limit\":501}",
+        "{\"handle\":7,\"start\":-1}", "{\"handle\":7,\"limit\":\"5\"}",
+        "{\"handle\":7,\"extra\":true}", "{}", "{\"handle\":null}",
+    })
+    {
+        using var bad = JsonDocument.Parse(invalid);
+        try { GeometryPageRequest.Parse(bad.RootElement); throw new Exception("invalid page request passed"); }
+        catch (ArgumentException) { }
+    }
+    return Task.CompletedTask;
+}
+
+static Task TestPolylineGeometryPaging()
+{
+    var request = new GeometryPageRequest(42, 1, 2);
+    Equal(2, request.CountFor(4));
+    Equal(3, request.NextStart(4));
+    Equal(null, new GeometryPageRequest(42, 3, 2).NextStart(4));
+    Equal(0, new GeometryPageRequest(42, 5, 2).CountFor(4));
+    var page = new PolylineGeometryPage(1, 42, 1, 2, 4,
+        new[] { new Point3(1, 2, 3), new Point3(4, 5, 6) }, true, 3,
+        "unknown", "unknown", false);
+    using var serialized = JsonDocument.Parse(JsonSerializer.Serialize(page));
+    Equal(2, serialized.RootElement.GetProperty("vertices").GetArrayLength());
+    True(serialized.RootElement.GetProperty("closed").GetBoolean(), "closed flag was lost");
+    False(serialized.RootElement.GetProperty("readyForDesign").GetBoolean(),
+        "raw polyline was promoted to design-ready geometry");
     return Task.CompletedTask;
 }
 
@@ -319,6 +519,8 @@ static Task TestJobActionAllowlist()
     True(BridgeJobPolicy.CanSubmit(GuardedWritePolicy.CommitAction), "guarded commit was excluded");
     True(BridgeJobPolicy.CanSubmit("get_cad_elements"), "long read was excluded");
     True(BridgeJobPolicy.CanSubmit("get_cad_layer_attributes"), "attribute read was excluded");
+    True(BridgeJobPolicy.CanSubmit("get_cad_polyface_geometry"), "geometry page read was excluded");
+    True(BridgeJobPolicy.CanSubmit("get_cad_polyline_geometry"), "polyline page read was excluded");
     False(BridgeJobPolicy.CanSubmit("draw_cad_ugdrillholes"), "unfenced writer was accepted");
     False(BridgeJobPolicy.CanSubmit("register_addin"), "registration was accepted as a job");
     False(BridgeJobPolicy.CanSubmit("commit_ugdrillholes_extra"), "suffix bypassed allowlist");
@@ -447,9 +649,12 @@ static async Task TestJobDeadlineDuringWrite()
 static Task TestMcpToolCatalogue()
 {
     var names = McpToolCatalog.Tools.Select(tool => tool.Name).ToArray();
-    Equal(20, names.Length);
+    Equal(23, names.Length);
     Equal(names.Length, names.Distinct(StringComparer.Ordinal).Count());
     True(names.Contains("get_cad_document"), "CAD reads are missing");
+    True(names.Contains("get_ug_selection_context"), "selected design snapshot is missing");
+    True(names.Contains("get_cad_polyface_geometry"), "paged geometry read is missing");
+    True(names.Contains("get_cad_polyline_geometry"), "paged polyline read is missing");
     True(names.Contains("commit_ugdrillholes"), "guarded commit is missing");
     True(names.Contains("job.submit"), "async jobs are missing");
     True(names.Contains("map.inspect"), "read-only Process Map inspection is missing");
@@ -509,13 +714,33 @@ static async Task TestMcpReadRoundTrip()
 
     using var listed = JsonDocument.Parse((await adapter.ProcessLineAsync(
         "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}"))!);
-    Equal(20, listed.RootElement.GetProperty("result").GetProperty("tools").GetArrayLength());
+    Equal(23, listed.RootElement.GetProperty("result").GetProperty("tools").GetArrayLength());
 
     using var called = JsonDocument.Parse((await adapter.ProcessLineAsync(
         "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"get_cad_document\",\"arguments\":{}}}"))!);
     False(called.RootElement.GetProperty("result").GetProperty("isError").GetBoolean(), "read tool failed");
     Equal("live", called.RootElement.GetProperty("result").GetProperty("structuredContent").GetProperty("mode").GetString());
     Equal("get_cad_document", bridge.Calls.Single());
+    using var contextCall = JsonDocument.Parse((await adapter.ProcessLineAsync(
+        "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"get_ug_selection_context\",\"arguments\":{\"roles\":{\"0x670\":\"stope\"},\"includePolyfaceMetrics\":true}}}"))!);
+    False(contextCall.RootElement.GetProperty("result").GetProperty("isError").GetBoolean(),
+        "selected context tool failed");
+    Equal("get_ug_selection_context", bridge.Calls.Last());
+    Equal("stope", bridge.Arguments.Last().GetProperty("roles").GetProperty("0x670").GetString());
+    True(bridge.Arguments.Last().GetProperty("includePolyfaceMetrics").GetBoolean(),
+        "MCP dropped the opt-in geometry flag");
+    using var geometryCall = JsonDocument.Parse((await adapter.ProcessLineAsync(
+        "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"get_cad_polyface_geometry\",\"arguments\":{\"handle\":\"0x670\",\"start\":0,\"limit\":25}}}"))!);
+    False(geometryCall.RootElement.GetProperty("result").GetProperty("isError").GetBoolean(),
+        "geometry page tool failed");
+    Equal("get_cad_polyface_geometry", bridge.Calls.Last());
+    Equal(25, bridge.Arguments.Last().GetProperty("limit").GetInt32());
+    using var polylineCall = JsonDocument.Parse((await adapter.ProcessLineAsync(
+        "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"name\":\"get_cad_polyline_geometry\",\"arguments\":{\"handle\":42,\"start\":1,\"limit\":2}}}"))!);
+    False(polylineCall.RootElement.GetProperty("result").GetProperty("isError").GetBoolean(),
+        "polyline page tool failed");
+    Equal("get_cad_polyline_geometry", bridge.Calls.Last());
+    Equal(1, bridge.Arguments.Last().GetProperty("start").GetInt32());
 }
 
 static async Task TestMcpStdioRoundTrip()
@@ -585,7 +810,7 @@ static async Task TestMcpStdioRoundTrip()
     using var listed = await Exchange(
         "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}");
     var tools = listed.RootElement.GetProperty("result").GetProperty("tools");
-    Equal(20, tools.GetArrayLength());
+    Equal(23, tools.GetArrayLength());
     True(tools[0].TryGetProperty("name", out _), "tools/list did not use MCP field casing");
     True(tools[0].TryGetProperty("inputSchema", out _), "tools/list omitted inputSchema");
 
@@ -715,11 +940,13 @@ sealed class TestClock : TimeProvider
 sealed class RecordingBridgeClient : IBridgeClient
 {
     public List<string> Calls { get; } = new();
+    public List<JsonElement> Arguments { get; } = new();
 
     public Task<JsonElement> InvokeAsync(
         string action, JsonElement arguments, CancellationToken cancellationToken)
     {
         Calls.Add(action);
+        Arguments.Add(arguments.Clone());
         return Task.FromResult(JsonSerializer.SerializeToElement(new
         {
             id = "bridge-test", mode = "live", success = true,

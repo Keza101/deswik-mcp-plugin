@@ -45,7 +45,20 @@ public static class McpToolCatalog
         new McpToolDefinition("get_cad_elements", "Return bounded entity summaries, optionally from one layer.",
             Schema(("layer", String("Optional exact layer path")), ("limit", Integer(1, 10000)))),
         new McpToolDefinition("get_cad_selection", "Return the current Deswik selection with supported geometry.", Empty),
+        new McpToolDefinition("get_ug_selection_context", "Return a read-only selection snapshot; optional operator role labels and polyface metrics do not make it design-ready.",
+            Schema(("roles", new Dictionary<string, object>
+            {
+                ["type"] = "object",
+                ["description"] = "Selected decimal handles, or hex handles prefixed 0x, mapped to operator-supplied mining roles",
+                ["additionalProperties"] = new Dictionary<string, object>
+                {
+                    ["type"] = "string",
+                    ["enum"] = new[] { "stope", "drive", "brow", "void", "ring", "hole", "survey", "unclassified" },
+                },
+            }), ("includePolyfaceMetrics", new Dictionary<string, object> { ["type"] = "boolean" }))),
         new McpToolDefinition("get_cad_polyface_info", "Return mesh statistics and bounds for one polyface.", Handle),
+        new McpToolDefinition("get_cad_polyface_geometry", "Return one bounded page of raw polyface vertices and face indexes; not design-ready.", GeometryPageSchema()),
+        new McpToolDefinition("get_cad_polyline_geometry", "Return one bounded page of polyline vertices and its closed flag; not design-ready.", GeometryPageSchema()),
         new McpToolDefinition("get_cad_polylines_under", "Return polylines below a layer subtree.",
             Schema(("layerPrefix", String("Layer subtree prefix")), required: new[] { "layerPrefix" })),
         new McpToolDefinition("get_cad_blasthole_details", "Return native BlastHole fields for one handle.", Handle),
@@ -106,6 +119,27 @@ public static class McpToolCatalog
     private static object PathSchema() =>
         Schema(("path", String("Absolute local Process Map path")), required: new[] { "path" });
 
+    private static object GeometryPageSchema() => new Dictionary<string, object>
+    {
+        ["type"] = "object",
+        ["properties"] = new Dictionary<string, object>
+        {
+            ["handle"] = new Dictionary<string, object>
+            {
+                ["description"] = "Positive decimal handle or 0x-prefixed hexadecimal handle",
+                ["oneOf"] = new object[]
+                {
+                    new Dictionary<string, object> { ["type"] = "integer", ["minimum"] = 1 },
+                    new Dictionary<string, object> { ["type"] = "string", ["minLength"] = 1 },
+                },
+            },
+            ["start"] = Integer(0, int.MaxValue),
+            ["limit"] = Integer(1, 500),
+        },
+        ["required"] = new[] { "handle" },
+        ["additionalProperties"] = false,
+    };
+
     private static object JobSubmitSchema() => new Dictionary<string, object>
     {
         ["type"] = "object",
@@ -117,7 +151,8 @@ public static class McpToolCatalog
                 ["enum"] = new[]
                 {
                     "get_cad_document", "get_cad_layers", "get_cad_layer_attributes",
-                    "get_cad_elements", "get_cad_selection", "get_cad_polyface_info",
+                    "get_cad_elements", "get_cad_selection", "get_ug_selection_context", "get_cad_polyface_info",
+                    "get_cad_polyface_geometry", "get_cad_polyline_geometry",
                     "get_cad_polylines_under", "get_cad_blasthole_details",
                     "get_cad_ugdrillhole_details", "commit_ugdrillholes", "rollback_ugdrillholes",
                 },

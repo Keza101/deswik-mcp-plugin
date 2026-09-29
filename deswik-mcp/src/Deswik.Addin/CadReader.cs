@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using Deswik.Ug.Design;
 using DwApplication = Deswik.Graphics.Application;
 using DwLayer = Deswik.Graphics.Primaries.Layer;
 using DwFigure = Deswik.Graphics.Primaries.Figure;
@@ -207,6 +208,50 @@ internal class CadReader
         return new { count = figures.Count, figures };
     }
 
+    public SelectionContext GetSelectedDesignContext(SelectionContextRequest request)
+    {
+        var figures = new List<SelectedFigure>();
+        if (_app.SelectionExists)
+        {
+            foreach (var item in _app.Selections.SelectedEntities())
+            {
+                if (item is not DwFigure figure) continue;
+                string? layer = null;
+                try { layer = figure.Layer?.Name; } catch { }
+                Bounds3? bounds = null;
+                try
+                {
+                    var box = figure.BoundingBox;
+                    var min = new Point3(box.Min.x, box.Min.y, box.Min.z);
+                    var max = new Point3(box.Max.x, box.Max.y, box.Max.z);
+                    if (new[] { min.X, min.Y, min.Z, max.X, max.Y, max.Z }.All(double.IsFinite))
+                        bounds = new Bounds3(min, max);
+                }
+                catch { } // Some CAD figures have no usable bounding box.
+                var type = FigureType(figure);
+                PolyfaceMetrics? metrics = null;
+                if (request.IncludePolyfaceMetrics && type == "Polyface")
+                {
+                    try
+                    {
+                        var polyface = figure.asPolyface;
+                        var cog = polyface.CenterOfGravity;
+                        var center = new Point3(cog.x, cog.y, cog.z);
+                        var volume = polyface.Volume;
+                        var vertexCount = polyface.VertexCount;
+                        if (double.IsFinite(center.X) && double.IsFinite(center.Y) &&
+                            double.IsFinite(center.Z) && double.IsFinite(volume) && vertexCount >= 0)
+                            metrics = new PolyfaceMetrics(center, volume, vertexCount);
+                    }
+                    catch { } // An unreadable mesh is reported as a warning in the context.
+                }
+                figures.Add(new SelectedFigure(figure.HandleID, figure.GUID.ToString(),
+                    type, layer, bounds, metrics));
+            }
+        }
+        return SelectionContext.FromSelection(DrawingPath, _app.IsDirty, figures, request);
+    }
+
     // Note: Deswik.Graphics.Geometry.Point exposes lowercase x/y/z.
     private static object Pt(Deswik.Graphics.Geometry.Point p) => new { x = p.x, y = p.y, z = p.z };
 
@@ -377,6 +422,60 @@ internal class CadReader
             volume = pf.Volume,
             vertexCount = pf.VertexCount
         };
+    }
+
+    public PolyfaceGeometryPage GetPolyfaceGeometryPage(GeometryPageRequest request)
+    {
+        var polyface = RequirePolyface(request.Handle);
+        var vertexList = polyface.VertexList;
+        var vertexCount = vertexList.Count;
+        var faceCount = polyface.FaceCount;
+        var vertexPageCount = request.CountFor(vertexCount);
+        var facePageCount = request.CountFor(faceCount);
+        var vertices = new List<Point3>(vertexPageCount);
+        var faces = new List<FaceIndices>(facePageCount);
+
+        for (var i = request.Start; i < request.Start + vertexPageCount; i++)
+        {
+            var point = vertexList[i];
+            if (!double.IsFinite(point.x) || !double.IsFinite(point.y) || !double.IsFinite(point.z))
+                throw new InvalidOperationException($"Polyface vertex {i} has non-finite coordinates");
+            vertices.Add(new Point3(point.x, point.y, point.z));
+        }
+        for (var i = request.Start; i < request.Start + facePageCount; i++)
+        {
+            int a = 0, b = 0, c = 0, d = 0;
+            if (!polyface.GetFaceIndexes(i, ref a, ref b, ref c, ref d))
+                throw new InvalidOperationException($"Polyface face {i} could not be read");
+            faces.Add(new FaceIndices(a, b, c, d));
+        }
+
+        return new PolyfaceGeometryPage(1, request.Handle, request.Start, request.Limit,
+            vertexCount, faceCount, vertices, faces, request.NextStart(vertexCount, faceCount),
+            "Deswik.Graphics.Figures.Polyface.GetFaceIndexes (raw)",
+            "unknown", "unknown", false);
+    }
+
+    public PolylineGeometryPage GetPolylineGeometryPage(GeometryPageRequest request)
+    {
+        var figure = FindByHandle(request.Handle);
+        if (!figure.IsPolyline)
+            throw new ArgumentException($"Figure {request.Handle} is not a Polyline (it is {FigureType(figure)})");
+        var polyline = figure.asPolyline;
+        var vertexList = polyline.VertexList;
+        var vertexCount = vertexList.Count;
+        var pageCount = request.CountFor(vertexCount);
+        var vertices = new List<Point3>(pageCount);
+        for (var i = request.Start; i < request.Start + pageCount; i++)
+        {
+            var point = vertexList[i];
+            if (!double.IsFinite(point.x) || !double.IsFinite(point.y) || !double.IsFinite(point.z))
+                throw new InvalidOperationException($"Polyline vertex {i} has non-finite coordinates");
+            vertices.Add(new Point3(point.x, point.y, point.z));
+        }
+        return new PolylineGeometryPage(1, request.Handle, request.Start, request.Limit,
+            vertexCount, vertices, polyline.Closed, request.NextStart(vertexCount),
+            "unknown", "unknown", false);
     }
 
     /// <summary>

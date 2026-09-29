@@ -118,7 +118,9 @@ forgets all IDs; polling an old ID fails with `job_unknown`.
 
 The exact `job.submit` set is `get_cad_document`, `get_cad_layers`,
 `get_cad_layer_attributes`, `get_cad_elements`, `get_cad_selection`,
-`get_cad_polyface_info`, `get_cad_polylines_under`,
+`get_ug_selection_context`, `get_cad_polyface_info`,
+`get_cad_polyface_geometry`, `get_cad_polyline_geometry`,
+`get_cad_polylines_under`,
 `get_cad_blasthole_details`, `get_cad_ugdrillhole_details`,
 `commit_ugdrillholes`, and `rollback_ugdrillholes`. A commit or rollback
 still requires its own human-minted token in `args`. Unknown actions and legacy
@@ -147,11 +149,13 @@ delimited JSON-RPC 2.0 on stdin/stdout and supports the `2025-11-25`,
 clients. The server advertises only the `tools` capability; logs and bridge
 traffic never use stdout.
 
-`tools/list` returns an exact 20-tool catalogue:
+`tools/list` returns an exact 23-tool catalogue:
 
 - CAD reads: `get_cad_document`, `get_cad_layers`,
   `get_cad_layer_attributes`, `get_cad_elements`, `get_cad_selection`,
-  `get_cad_polyface_info`, `get_cad_polylines_under`,
+  `get_ug_selection_context`, `get_cad_polyface_info`,
+  `get_cad_polyface_geometry`, `get_cad_polyline_geometry`,
+  `get_cad_polylines_under`,
   `get_cad_blasthole_details`, and `get_cad_ugdrillhole_details`.
 - Guarded workflow: `preview_ugdrillholes`, `get_write_approval`,
   `commit_ugdrillholes`, `prepare_rollback_ugdrillholes`, and
@@ -176,6 +180,36 @@ without changing its `mode` or `errorCode`.
 ```powershell
 . deswik-mcp/tools/deswik.ps1
 dsw get_cad_selection
+dsw get_ug_selection_context
+dsw get_ug_selection_context @{ roles=@{ '0x670'='stope' }; includePolyfaceMetrics=$true }
+dsw get_cad_polyface_geometry @{ handle='0x670'; start=0; limit=25 }
+dsw get_cad_polyline_geometry @{ handle=42; start=0; limit=25 }
 dsw preview_ugdrillholes @{ holes=@(@{ pivot=@(0,0,0); collar=@(0,0,1); toe=@(0,0,10); holeId="H1" }) }
 dsw map.inspect @{ path=(Resolve-Path 'tests\archive_ddf\SDK - Stope Design Layout.ddf').Path }
 ```
+
+`get_ug_selection_context` accepts optional `roles` and
+`includePolyfaceMetrics` parameters. Each role key must be a selected decimal
+handle or an explicitly `0x`-prefixed hexadecimal handle. Supported labels
+are `stope`, `drive`, `brow`, `void`, `ring`, `hole`, `survey`, and
+`unclassified`. Labels are operator-supplied for this response only; unknown,
+duplicate, or unselected handles fail with `invalid_context_request`.
+Metrics are opt-in because polyface volume and center-of-gravity reads can be
+costly. Unreadable metrics are reported as warnings, and `readyForDesign`
+remains `false` even when every selected figure has a role.
+
+`get_cad_polyface_geometry` requires one polyface handle (decimal or
+`0x`-prefixed hex) and accepts `start` (default 0) and `limit` (default 250,
+maximum 500). It returns a matching page of vertices and raw four-value
+`GetFaceIndexes` results, with total `vertexCount`, `faceCount`, and
+`nextStart`. Face indexes are preserved exactly as Deswik returns them;
+negative values and edge visibility have not yet been interpreted. The
+response declares unknown units and coordinate system and
+`readyForDesign: false`. An invalid request fails with
+`invalid_geometry_request`; unreadable geometry fails with
+`geometry_unavailable`.
+
+`get_cad_polyline_geometry` uses the same `handle`, `start`, and `limit`
+request bounds for one polyline. It returns `vertexCount`, a bounded
+`vertices` page, the native `closed` flag, and `nextStart`. It also declares
+unknown units and coordinate system and `readyForDesign: false`.

@@ -23,6 +23,8 @@ Deswik.CAD ── Deswik.Addin (this plugin, loaded by Plugin Manager)
   (`Load(IWin32Window)`, `Unload()`, `Application` property, and a
   `ctor(Deswik.Graphics.Application)` — all four are required by the loader).
   Registers a dock panel and connects to the bridge as a capability provider.
+- `deswik-mcp/src/Deswik.Ug.Design` — versioned synthetic underground design
+  profiles and typed selection snapshots, with no CAD dependency.
 - `deswik-mcp/src/Deswik.Bridge` — shared wire-protocol library.
 - `deswik-mcp/src/Deswik.Bridge.Standalone` — standalone TCP bridge that
   routes requests to whichever add-in registered the capability and owns the
@@ -68,13 +70,22 @@ CAD production writes use the guarded flow documented in
 inside Deswik, then a single-use token-bound commit. The six older direct
 writer actions fail with `forbidden_unfenced`.
 
+The dock panel's **UG profiles** button opens the synthetic profile editor.
+Change the starter's ring or deviation parameters and choose **Save as new**;
+each copy is stored as JSON under the current user's
+`Documents\DeswikMcp\Profiles` folder. Saved profiles can be reopened there.
+The starter remains unchanged, and every current profile is marked test-only;
+these values are not approved mine standards. See the
+[underground roadmap](docs/ug-mining-functionality-roadmap.md) and
+[Phase 8 acceptance steps](docs/bridge-phases/phase-8-underground-roadmap.md).
+
 Long CAD reads and guarded commits can run as bridge-owned jobs. Submit with
 `job.submit`, poll with `job.get`, and request cancellation with `job.cancel`.
 The job ID is valid only for the current bridge process. See
 `docs/Wire-Protocol.md` for the action allowlist, deadlines, and cancellation
 states.
 
-The stdio MCP adapter exposes 20 typed tools: live CAD reads, the guarded
+The stdio MCP adapter exposes 23 typed tools: live CAD reads, the guarded
 preview/approval/commit/rollback flow, async job controls, and read-only
 Process Map inspection. It does not expose legacy CAD writers or the
 file-producing `map.generate` and `map.install` actions. A direct or async
@@ -100,11 +111,31 @@ arguments contain a human-minted single-use token.
 dsw get_cad_document
 dsw get_cad_layers
 dsw get_cad_selection
+dsw get_ug_selection_context
+dsw get_cad_polyface_geometry @{ handle=1648; start=0; limit=25 }
+dsw get_cad_polyline_geometry @{ handle=42; start=0; limit=25 }
 ```
 
 Port `9595` is a raw JSON-over-TCP endpoint, not a website. Do not open it in
 a browser. Use the PowerShell client above; add `-Mode demo` only when
 synthetic demo data is explicitly required.
+
+`get_ug_selection_context` is a read-only snapshot of the current drawing and
+selected figure handles. Optional `roles` map selected decimal handles or
+`0x`-prefixed hexadecimal handles to temporary operator labels; optional
+`includePolyfaceMetrics` reads center of gravity, volume, and vertex count
+from selected polyfaces. Neither option saves labels or makes the context
+design-ready: coordinate system, units, and mining roles remain unverified.
+The action does not create an **Inspect stope** button or a production design.
+
+`get_cad_polyface_geometry` reads one page of vertices and raw Deswik face
+indexes from a polyface handle. Pages are limited to 500 entries;
+`nextStart` tells you when another page exists. Face index conventions are not
+normalized or approved for design calculations.
+
+`get_cad_polyline_geometry` reads up to 500 vertices per page from one exact
+polyline handle and returns its native `closed` flag. It does not establish
+units, coordinate system, or suitability for design calculations.
 
 For an MCP client, configure the built stdio executable while leaving the
 bridge running separately:

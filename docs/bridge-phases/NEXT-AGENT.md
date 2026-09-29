@@ -6,45 +6,52 @@
    in the Phase 7 shell, so confirm availability before relying on it.
 2. Read `docs/workflow-bridge-build-prompt.md`, especially the trust boundary,
    one-phase termination rule, and Phase 8.
-3. Read `docs/bridge-phases/phase-7-mcp-adapter.md` and
-   `docs/bridge-phases/phase-6-async-jobs.md`.
+3. Read `docs/bridge-phases/phase-8-underground-roadmap.md` and
+   `docs/ug-mining-functionality-roadmap.md`.
 4. Check `git status` before changing anything. The intended branch is `main`
    and the intended remote is `origin`.
 
 ## Current gate
 
-Phase 7 is human-accepted. The user reported “phase 7 passes” on 2026-09-29,
-covering the four checks in `phase-7-mcp-adapter.md`:
-
-1. exactly 20 typed MCP tools;
-2. live `get_cad_document` against the disposable drawing;
-3. unapproved and tokenless writes refused with no geometry change;
-4. one human-approved MCP commit followed by its exact-handle rollback.
-
-The Phase 7 write-up and status board record the user's acceptance. The next
-separate run may begin Phase 8 under the project's one-phase-per-run rule.
+Phase 7 is human-accepted. Phase 8 is the full underground roadmap before the
+final three-node pilot, as explicitly selected by the user. The synthetic
+profile editor passed its four live CAD checks on 2026-09-29. The next
+read-only milestone, `get_ug_selection_context`, passed its four live checks
+on 2026-09-29. It is a PowerShell/MCP action, not an **Inspect stope** button.
+The opt-in polyface metrics and temporary operator-supplied role labels also
+passed four live checks on 2026-09-29. Full geometry and verified role mapping
+are still outstanding. The `get_cad_polyface_geometry` action reads bounded
+pages of raw vertices and face indexes; its original four live checks passed.
+Expanded polyface regression checks and the new paged polyline read are pending
+in `phase-8-underground-roadmap.md`, grouped into one CAD session.
+The user also approved the tracked synthetic donor for the eventual pilot.
 
 ## Verified automated state
 
 - `C:\Program Files\Deswik\Deswik.Suite 2025.2` is the resolved Deswik install.
-- No standalone Python was on `PATH`; the compatible runtime used was
-  `C:\Program Files\LibreOffice\program\python.exe` (Python 3.12.13).
+- `python` is available on `PATH` in the current shell; recheck it before
+  starting the bridge on another machine.
 - `tests/test_roundtrip.py`: `ALL TESTS PASSED`.
 - `tests/test_commands.py`: `ALL TESTS PASSED`.
 - Release builds for Addin, Bridge.Standalone, and Deswik.Mcp.Server succeeded
-  with zero errors.
-- The executable C# harness passed all 28 checks, including a real MCP stdio
-  subprocess connected to a fake loopback TCP bridge.
+  with zero errors using the isolated `.phase8-build` output.
+- The executable C# harness passed all 34 checks, including a real MCP stdio
+  subprocess connected to a fake loopback TCP bridge and geometry-page
+  invariants.
+- Isolated live bridge processes passed fake-addin registration and
+  `get_ug_selection_context`, `get_cad_polyface_geometry`, and
+  `get_cad_polyline_geometry` routing checks on temporary loopback ports.
 - `git diff --check` passed.
 
-The ignored `.phase6-build` directory at repository root contains only about
-2 MB of generated binaries/intermediates/logs. It does not belong under
-`docs/bridge-phases`; the durable Phase 6 record is already there.
+The Phase 8 files are uncommitted. `main` is one commit ahead of `origin/main`
+from Phase 7. The profile and selection-snapshot gates are accepted; full
+CTX-01 and the pilot are not. Do not push without a new request.
 
 ## Phase 8 boundary
 
-Phase 8 is the three-node pilot:
-`Inspect stope`, `Preview rings`, and `Approve write`. Node 3 must be a real
+The final Phase 8 pilot will use three Process Map nodes:
+`Inspect stope`, `Preview rings`, and `Approve write`. These controls do not
+exist in the current add-in or Process Map. Node 3 must be a real
 human gate that shows the change manifest and permits token minting only after
 operator action. Geometry mathematics must stay in the deterministic library
 outside CAD. Every run must record source handles, parameters, warnings,

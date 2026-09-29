@@ -55,9 +55,9 @@ internal class McpStatusControl : UserControl
         var buttons = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 34,
+            Height = 68,
             FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
+            WrapContents = true,
             Padding = new Padding(0, 4, 0, 4)
         };
 
@@ -78,9 +78,13 @@ internal class McpStatusControl : UserControl
         var btnClear = new Button { Text = "Clear", AutoSize = true };
         btnClear.Click += (_, _) => _lstLog.Items.Clear();
 
+        var btnProfiles = new Button { Text = "UG profiles", AutoSize = true };
+        btnProfiles.Click += (_, _) => new ProfileEditorForm().ShowDialog(this);
+
         buttons.Controls.Add(btnReconnect);
         buttons.Controls.Add(btnLog);
         buttons.Controls.Add(btnClear);
+        buttons.Controls.Add(btnProfiles);
 
         _lstLog = new ListBox
         {

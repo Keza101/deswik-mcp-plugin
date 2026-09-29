@@ -6,21 +6,42 @@ This backlog extends the existing Deswik CAD bridge into an underground drill-an
 
 The engineering concepts are informed by the current repository, general underground mining practice, and the public [D&B Optimizer](https://ug-d-b-guidelines.vercel.app/) interface. Values shown by that site must be treated as configurable reference rules, not universal design standards. Every production rule requires validation against the site's geotechnical model, explosive products, equipment limits, statutory requirements, and approved mine standards.
 
+## Delivery decision and status — 2026-09-29
+
+The full underground roadmap below is the build scope **before** the final
+three-node pilot. The user approved the tracked synthetic Process Map donor for
+that later pilot. The first active milestone is a versioned profile model and
+editor, not production ring generation. A synthetic profile is only for
+disposable test drawings; changing its numbers never makes it an approved mine
+standard.
+
+| Workstream | Current delivery state | Next gate |
+|---|---|---|
+| Platform reliability (`FND-01`–`FND-08`) | Partly built: stdio MCP, fail-closed modes, guarded writes, async jobs, and tests exist. Full schema/version coverage, audit, and compatibility cleanup remain. | Complete the missing foundation items and live acceptance. |
+| Design context and profiles (`CTX-01`–`CTX-06`) | The profile editor, snapshot, opt-in metrics with temporary roles, and raw polyface paging each passed four live checks. Expanded polyface regression and new polyline paging await CAD acceptance; full geometry, conventions, and approved-profile work remain. | Run the combined geometry acceptance session, then extract other figure types. |
+| Drill-and-blast design (`DBD-01`–`DBD-09`) | Planned. Existing native-hole write is a guarded primitive, not a design calculator. | Build pure deterministic calculators against explicit profiles and test boundaries. |
+| Automated design QA (`QA-01`–`QA-04`) | Planned. | Gate every generated proposal with measured rules and issue reports. |
+| As-drilled and as-charged (`ACT-01`–`ACT-05`) | Planned. | Add approved import mappings and reconciliation before readiness claims. |
+| Performance and improvement (`PER-01`–`PER-05`) | Planned. | Version observed outcomes and calibration without overwriting approved profiles. |
+| Operational integration (`OPS-01`–`OPS-05`) | Planned; Scheduler/LHS services are not verified live adapters. | Capture real provider contracts and pass live integration gates. |
+| AI workflows (`AI-01`–`AI-04`) | Planned. | Expose only deterministic, audited and approved actions. |
+| Final three-node Process Map pilot | Deferred until the preceding workstreams are accepted. | Run Inspect stope → Preview rings → Approve write on a saved disposable drawing. |
+
 ## Current Foundation
 
 | Area | Current state |
 |---|---|
 | Live CAD connection | Working local bridge on `127.0.0.1:9595` |
-| CAD reads | Document, layers, entities, attributes, selection, polyface information, slices, and drill-hole details |
-| CAD writes | Layers, text, polylines, `BlastHole`, and native `UGDrillHole` entities |
+| CAD reads | Document, layers, entities, attributes, selection, polyface information, paged raw polyface and polyline geometry, slices, and drill-hole details |
+| CAD writes | Native `UGDrillHole` preview, human-token commit, and exact-handle rollback; former direct writers are fenced |
 | UGDB conventions | Ring, pivot, hole ID, diameter, length, charge fields, and `RINGDESIGN` layer convention supported |
 | Scheduler | Service code exists, but the CAD add-in deliberately does not register Scheduler capabilities |
 | LHS and generic CAD services | Mostly sample or placeholder responses |
-| Standalone bridge | Routes registered capabilities; otherwise falls back to demo responses |
-| MCP protocol | Not implemented yet; the current protocol is custom newline-delimited JSON over TCP |
-| Long-running work | Limited by a 15-second bridge timeout |
-| Write safety | No preview/commit transaction, rollback, or Deswik undo integration |
-| Automated tests | No test project or live-CAD regression harness exists |
+| Standalone bridge | Routes live capabilities and fails closed; demo needs an explicit request |
+| MCP protocol | Local stdio MCP adapter with 23 typed tools; bridge TCP remains internal |
+| Long-running work | Process-local jobs with progress, cancellation, and deadline handling |
+| Write safety | Owned preview, default-No Deswik approval, single-use tokens, and exact-handle rollback |
+| Automated tests | Python suites and a C# bridge/MCP harness; live CAD gates remain manual |
 
 ## Design Principles
 
@@ -88,9 +109,34 @@ Resolve the current .NET 8 versus Deswik dependency-version warnings, document t
 
 Convert the current CAD selection into a typed context containing drives, brows, stope solids, voids, rings, holes, survey strings, coordinate system, and relevant attributes.
 
+The first implemented slice is `get_ug_selection_context`: one read-only
+UI-thread snapshot of saved drawing identity, selected handles, CAD types,
+layers, and available bounds. It does not infer a stope or brow from a layer
+name. Every semantic role and the coordinate system/units remain unverified,
+so `readyForDesign` is false. The user accepted all four live snapshot checks
+on 2026-09-29. Full CTX-01 role mapping and geometry remain planned.
+
+An opt-in follow-up accepts exact selected handles mapped to temporary
+operator-supplied role labels. It never infers a role from the CAD type or
+layer, never persists the label, and never marks the context design-ready.
+Decimal handles and `0x`-prefixed hexadecimal handles are supported; extra,
+duplicate, and invalid role assignments fail closed. The user accepted all
+four live follow-up checks on 2026-09-29.
+
 ### `CTX-02` Complete geometry extraction
 
 Return full geometry for supported entity types rather than only handles and bounding boxes. Include polyline vertices, polyface topology, text, points, circles, lines, arcs, drill holes, and user attributes.
+
+The first accepted opt-in geometry slice reads existing verified polyface API fields:
+center of gravity, volume, and vertex count. Unreadable metrics produce an
+explicit warning. Vertices and topology are not yet extracted, so CTX-02
+remains incomplete. A subsequent `get_cad_polyface_geometry` slice reads
+bounded pages of `VertexList` and raw `GetFaceIndexes` values from the
+installed 2025.2 DLL. Its original four live checks passed; expanded
+regression checks are pending. Index sign and edge-visibility conventions
+have not been normalized. `get_cad_polyline_geometry` now reads bounded
+vertex pages and the native closed flag, pending CAD acceptance. Neither
+page is design-ready. Other figure types remain planned.
 
 ### `CTX-03` Coordinate and angle conventions
 
@@ -108,6 +154,15 @@ Introduce domain records for:
 ### `CTX-05` Mine-standard profiles
 
 Store approved ranges and lookup tables in versioned JSON or YAML profiles. Profiles should contain equipment limits, hole diameters, burden/spacing rules, minimum mining width, deviation assumptions, charge products, timing rules, and QA tolerances.
+
+The first schema (`schemaVersion: 1`) is a **synthetic test-only** JSON
+profile covering ring geometry and deviation assumptions. The Deswik dock
+panel opens an editor, permits parameter changes, and saves each copy as a new
+JSON file in the current user's `Documents\DeswikMcp\Profiles` folder. The
+embedded starter is never overwritten. The schema and editor reject a claim
+that a synthetic profile is approved. Later schema versions must add site
+review metadata and the remaining charge, rig, timing, and QA fields before
+production calculations can use a profile.
 
 ### `CTX-06` Attribute read/write mapping
 
@@ -340,4 +395,3 @@ Answer questions across CAD, UGDB, Scheduler, LHS, and reconciliation data while
 - Audit entry linking source entities to created or modified handles
 - Live Deswik.CAD acceptance test on each supported build
 - Mining engineer review before production use
-

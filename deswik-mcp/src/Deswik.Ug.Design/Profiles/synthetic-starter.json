@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "profileId": "synthetic-starter",
+  "name": "Synthetic starter",
+  "revision": 0,
+  "basis": "synthetic-test-only",
+  "units": "metres",
+  "notes": "Example values for disposable drawings only; no site or engineering approval.",
+  "ring": {
+    "holeDiameterMm": 89,
+    "burdenM": 1.8,
+    "collarSpacingM": 1.5,
+    "toeSpacingM": 2.0,
+    "maxHoleLengthM": 28.0,
+    "minHoleSeparationM": 0.5,
+    "browOffsetM": 0.5,
+    "subdrillM": 0.3
+  },
+  "deviation": {
+    "angularDegrees": 1.0,
+    "collarToleranceM": 0.1
+  }
+}

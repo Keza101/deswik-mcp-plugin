@@ -13,6 +13,11 @@
     <ProjectReference Include="..\Deswik.Bridge\Deswik.Bridge.csproj" />
     <ProjectReference Include="..\Deswik.Bridge.Standalone\Deswik.Bridge.Standalone.csproj" />
     <ProjectReference Include="..\Deswik.Mcp.Server\Deswik.Mcp.Server.csproj" />
+    <ProjectReference Include="..\Deswik.Ug.Design\Deswik.Ug.Design.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Deswik.Addin\ProfileFiles.cs" Link="ProfileFiles.cs" />
   </ItemGroup>
 
   <!--

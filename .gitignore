@@ -28,6 +28,7 @@ deswik-mcp/src/*
 !deswik-mcp/src/Deswik.Bridge.Standalone/
 !deswik-mcp/src/Deswik.Bridge.Tests/
 !deswik-mcp/src/Deswik.Mcp.Server/
+!deswik-mcp/src/Deswik.Ug.Design/
 !deswik-mcp/tools/
 deswik-mcp/tools/*
 !deswik-mcp/tools/deswik.ps1

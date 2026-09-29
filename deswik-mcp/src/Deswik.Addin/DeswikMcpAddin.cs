@@ -302,11 +302,20 @@ public class DeswikMcpAddin
                 case "get_cad_selection":
                     HandleGetCadSelection(id);
                     break;
+                case "get_ug_selection_context":
+                    HandleGetUgSelectionContext(id, parameters);
+                    break;
                 case "draw_cad_polylines":
                     SendError(id, action, "Writer requires the guarded write flow", "forbidden_unfenced");
                     break;
                 case "get_cad_polyface_info":
                     HandleGetCadPolyfaceInfo(id, parameters);
+                    break;
+                case "get_cad_polyface_geometry":
+                    HandleGetCadPolyfaceGeometry(id, parameters);
+                    break;
+                case "get_cad_polyline_geometry":
+                    HandleGetCadPolylineGeometry(id, parameters);
                     break;
                 case "slice_cad_polyface":
                     SendError(id, action, "Writer requires the guarded write flow", "forbidden_unfenced");
@@ -864,6 +873,20 @@ public class DeswikMcpAddin
         });
     }
 
+    private void HandleGetUgSelectionContext(string id, System.Text.Json.JsonElement parameters)
+    {
+        try
+        {
+            var request = Deswik.Ug.Design.SelectionContextRequest.Parse(parameters);
+            var data = OnUiThread(() => RequireCadReader().GetSelectedDesignContext(request));
+            _bridgeClient?.SendAsync(new { id, action = "ug_selection_context_result", data });
+        }
+        catch (ArgumentException ex)
+        {
+            SendError(id, "get_ug_selection_context", ex.Message, "invalid_context_request");
+        }
+    }
+
     private void HandleDrawCadPolylines(string id, System.Text.Json.JsonElement parameters)
     {
         string layer = parameters.GetProperty("layer").GetString()
@@ -931,6 +954,42 @@ public class DeswikMcpAddin
             action = "cad_polyface_info_result",
             data
         });
+    }
+
+    private void HandleGetCadPolyfaceGeometry(string id, System.Text.Json.JsonElement parameters)
+    {
+        try
+        {
+            var request = Deswik.Ug.Design.GeometryPageRequest.Parse(parameters);
+            var data = OnUiThread(() => RequireCadReader().GetPolyfaceGeometryPage(request));
+            _bridgeClient?.SendAsync(new { id, action = "cad_polyface_geometry_result", data });
+        }
+        catch (ArgumentException ex)
+        {
+            SendError(id, "get_cad_polyface_geometry", ex.Message, "invalid_geometry_request");
+        }
+        catch (InvalidOperationException ex)
+        {
+            SendError(id, "get_cad_polyface_geometry", ex.Message, "geometry_unavailable");
+        }
+    }
+
+    private void HandleGetCadPolylineGeometry(string id, System.Text.Json.JsonElement parameters)
+    {
+        try
+        {
+            var request = Deswik.Ug.Design.GeometryPageRequest.Parse(parameters);
+            var data = OnUiThread(() => RequireCadReader().GetPolylineGeometryPage(request));
+            _bridgeClient?.SendAsync(new { id, action = "cad_polyline_geometry_result", data });
+        }
+        catch (ArgumentException ex)
+        {
+            SendError(id, "get_cad_polyline_geometry", ex.Message, "invalid_geometry_request");
+        }
+        catch (InvalidOperationException ex)
+        {
+            SendError(id, "get_cad_polyline_geometry", ex.Message, "geometry_unavailable");
+        }
     }
 
     private void HandleDrawCadBlastHoles(string id, System.Text.Json.JsonElement parameters)

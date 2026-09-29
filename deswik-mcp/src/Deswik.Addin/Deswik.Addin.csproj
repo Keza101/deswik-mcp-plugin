@@ -51,6 +51,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Deswik.Bridge\Deswik.Bridge.csproj" />
+    <ProjectReference Include="..\Deswik.Ug.Design\Deswik.Ug.Design.csproj" />
   </ItemGroup>
 
 </Project>
