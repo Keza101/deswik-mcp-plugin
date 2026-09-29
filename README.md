@@ -113,11 +113,15 @@ bridge running separately:
 {
   "mcpServers": {
     "deswik": {
-      "command": "H:\\Apps_Tools\\Deswik-Tools\\Deswik-MCP-Plugin\\deswik-mcp\\src\\Deswik.Mcp.Server\\bin\\Release\\net8.0\\Deswik.Mcp.Server.exe"
+      "command": "<ABSOLUTE_PLUGIN_ROOT>\\deswik-mcp\\src\\Deswik.Mcp.Server\\bin\\Release\\net8.0\\Deswik.Mcp.Server.exe"
     }
   }
 }
 ```
+
+Replace `<ABSOLUTE_PLUGIN_ROOT>` with the folder containing this README, using
+double backslashes in JSON. In PowerShell, `(Get-Location).Path` shows that
+folder after you open a terminal there.
 
 The adapter writes only JSON-RPC frames to stdout. It connects only to the
 loopback bridge, using port `9595` unless `DESWIK_BRIDGE_PORT` is set for a

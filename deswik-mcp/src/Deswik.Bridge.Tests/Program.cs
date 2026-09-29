@@ -39,7 +39,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("MCP refuses unknown and tokenless write tools", TestMcpToolRefusals),
     ("MCP rejects malformed JSON-RPC without exiting", TestMcpMalformedRequest),
     ("MCP read tool round-trips the live bridge envelope", TestMcpReadRoundTrip),
-    ("MCP stdio server completes initialize list call and refusals", TestMcpStdioRoundTrip),
+    ("MCP stdio server accepts a BOM and completes initialize list call and refusals", TestMcpStdioRoundTrip),
 };
 
 try
@@ -553,6 +553,7 @@ static async Task TestMcpStdioRoundTrip()
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             CreateNoWindow = true,
+            StandardInputEncoding = new UTF8Encoding(true),
         },
     };
     process.StartInfo.Environment["DESWIK_BRIDGE_PORT"] = port.ToString();

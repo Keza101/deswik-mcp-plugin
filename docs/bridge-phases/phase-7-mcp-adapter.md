@@ -2,29 +2,33 @@
 
 ## Gate
 
-Phase 7 — yes. Phases 1–6 are accepted, and the MCP adapter Definition of
-Done is provable on this machine. The buildable work and automated tests are
-complete; the live Deswik/MCP checklist below remains unticked.
+Phase 7 — yes. Phases 1–6 were accepted, and the MCP adapter Definition of
+Done was proven on this machine. The user reported Phase 7 passed on
+2026-09-29, covering the four live Deswik/MCP checks below.
 
 ## Status
 
-complete — typed stdio server, exact tool catalogue, Release builds, real
+accepted — typed stdio server, exact tool catalogue, Release builds, real
 stdio/TCP round-trip, regression tests, abuse tests, documentation, and the
-human acceptance walkthrough are complete. Human acceptance is pending.
+human acceptance walkthrough are complete. The user reported all four live
+acceptance checks passed on 2026-09-29; the CAD run was not independently
+observed in this session.
 
 ## Changed files
 
-- `H:\Apps_Tools\Deswik-Tools\Deswik-MCP-Plugin\deswik-mcp\src\Deswik.Mcp.Server\Deswik.Mcp.Server.csproj` — adds the dependency-free .NET 8 stdio executable.
-- `H:\Apps_Tools\Deswik-Tools\Deswik-MCP-Plugin\deswik-mcp\src\Deswik.Mcp.Server\McpToolCatalog.cs` — defines the exact 20-tool catalogue and token gate.
-- `H:\Apps_Tools\Deswik-Tools\Deswik-MCP-Plugin\deswik-mcp\src\Deswik.Mcp.Server\McpAdapter.cs` — implements JSON-RPC lifecycle, tool calls, refusals, and loopback forwarding.
-- `H:\Apps_Tools\Deswik-Tools\Deswik-MCP-Plugin\deswik-mcp\src\Deswik.Mcp.Server\Program.cs` — hosts newline-delimited MCP over stdin/stdout.
-- `H:\Apps_Tools\Deswik-Tools\Deswik-MCP-Plugin\deswik-mcp\src\Deswik.Bridge.Tests\Deswik.Bridge.Tests.csproj` — builds the MCP project into the existing offline test harness.
-- `H:\Apps_Tools\Deswik-Tools\Deswik-MCP-Plugin\deswik-mcp\src\Deswik.Bridge.Tests\Program.cs` — tests the catalogue, refusals, direct adapter, and real subprocess stdio/TCP path.
-- `H:\Apps_Tools\Deswik-Tools\Deswik-MCP-Plugin\.gitignore` — tracks the new MCP source project.
-- `H:\Apps_Tools\Deswik-Tools\Deswik-MCP-Plugin\README.md` — documents build, architecture, client configuration, and safety boundary.
-- `H:\Apps_Tools\Deswik-Tools\Deswik-MCP-Plugin\docs\Wire-Protocol.md` — documents MCP versions, tools, result shape, and excluded actions.
-- `H:\Apps_Tools\Deswik-Tools\Deswik-MCP-Plugin\docs\workflow-bridge-status.html` — records Phases 5–6 as accepted and Phase 7 as awaiting acceptance.
-- `H:\Apps_Tools\Deswik-Tools\Deswik-MCP-Plugin\docs\bridge-phases\phase-7-mcp-adapter.md` — records this gate and its operator checklist.
+Paths below are relative to the folder containing this file's `README.md`.
+
+- `deswik-mcp/src/Deswik.Mcp.Server/Deswik.Mcp.Server.csproj` — adds the dependency-free .NET 8 stdio executable.
+- `deswik-mcp/src/Deswik.Mcp.Server/McpToolCatalog.cs` — defines the exact 20-tool catalogue and token gate.
+- `deswik-mcp/src/Deswik.Mcp.Server/McpAdapter.cs` — implements JSON-RPC lifecycle, tool calls, refusals, and loopback forwarding.
+- `deswik-mcp/src/Deswik.Mcp.Server/Program.cs` — hosts newline-delimited MCP over stdin/stdout.
+- `deswik-mcp/src/Deswik.Bridge.Tests/Deswik.Bridge.Tests.csproj` — builds the MCP project into the existing offline test harness.
+- `deswik-mcp/src/Deswik.Bridge.Tests/Program.cs` — tests the catalogue, refusals, direct adapter, and real subprocess stdio/TCP path.
+- `.gitignore` — tracks the new MCP source project.
+- `README.md` — documents build, architecture, client configuration, and safety boundary.
+- `docs/Wire-Protocol.md` — documents MCP versions, tools, result shape, and excluded actions.
+- `docs/workflow-bridge-status.html` — records Phase 7 acceptance and Phase 8 as next.
+- `docs/bridge-phases/phase-7-mcp-adapter.md` — records this gate and its operator checklist.
 
 ## Behaviour
 
@@ -152,6 +156,16 @@ MCP< {"jsonrpc":"2.0","id":5,"result":{"content":[{"type":"text","text":"{\r\n  
 The generated request ID is shown as a placeholder in the write-up to avoid
 pretending it is stable; the terminal trace contained its actual UUID.
 
+Windows PowerShell 5.1 compatibility was rechecked on 2026-09-29. Its
+`ConvertFrom-Json` has no `-Depth` parameter, and its redirected stdin writes
+a UTF-8 BOM before the first frame. The client block below now uses plain
+`ConvertFrom-Json`; the MCP host removes a BOM only at the start of its first
+input line. The executable C# harness passed all 28 checks with a BOM-bearing
+stdio client, and a Windows PowerShell 5.1 run returned protocol `2025-11-25`,
+exactly 20 tools, and `inputSchema` on every tool. The normal Release MCP
+server was rebuilt with zero warnings and zero errors. A server process started
+before this correction must be closed and restarted before continuing.
+
 ```powershell
 git check-ignore -v 'docs\bridge-phases\phase-7-mcp-adapter.md'
 ```
@@ -172,15 +186,20 @@ Exit code 1 with no output is expected: the phase record is not ignored.
 ## Assumptions
 
 - `C:\Program Files\Deswik\Deswik.Suite 2025.2` remains the target Deswik installation.
-- The accepted Phase 4 guarded-write path and Phase 6 job path are assumed Current for the pending live check; automated tests revalidated their safety policies.
+- The accepted Phase 4 guarded-write path and Phase 6 job path were assumed Current for the live check; automated tests revalidated their safety policies.
 - The project's required initialized stdio lifecycle targets MCP `2025-11-25`; compatible older initialized versions are also accepted.
 - A disposable saved drawing with a clean `_MCP_PREVIEW` layer is available for the human write check.
 
 ## Human acceptance
 
+The user reported “phase 7 passes” on 2026-09-29 after the Windows PowerShell
+5.1 client and UTF-8 BOM fixes. This is a human-reported pass for checks 1–4;
+the detailed live transcript was not supplied. The steps remain below for
+repeat runs.
+
 Use only a **saved disposable Deswik drawing**. Close Deswik.CAD before any
-rebuild because it locks the add-in DLL. Open PowerShell in
-`H:\Apps_Tools\Deswik-Tools\Deswik-MCP-Plugin`. Copy only the lines inside
+rebuild because it locks the add-in DLL. Open PowerShell in the plugin folder
+containing `README.md`. Copy only the lines inside
 each code block, never the Markdown fences or raw JSON examples. Stop if a
 command fails: it does not populate its result variable, so do not reuse an
 empty or stale approval, token, or commit value.
@@ -188,22 +207,31 @@ empty or stale approval, token, or commit value.
 In PowerShell window 1, build and run the bridge. Leave this window open:
 
 ```powershell
-$pluginRoot = (Get-Location).Path
-$deswikDir = 'C:\Program Files\Deswik\Deswik.Suite 2025.2'
+$dotnetExe = (Get-Command dotnet -ErrorAction SilentlyContinue).Source
+if (-not $dotnetExe -or -not (& $dotnetExe --list-sdks)) {
+  $dotnetExe = Join-Path $env:USERPROFILE '.dotnet-sdk-8\dotnet.exe'
+}
+if (-not (Test-Path $dotnetExe) -or -not (& $dotnetExe --list-sdks)) { throw 'Install .NET 8 SDK and set $dotnetExe to its dotnet.exe.' }
+$deswikDir = Read-Host 'Full path to your Deswik.Suite installation folder'
+if (-not (Test-Path (Join-Path $deswikDir 'Deswik.Graphics.dll'))) { throw 'Deswik.Graphics.dll was not found in that folder.' }
 $env:DESWIK_DIR = $deswikDir
-$env:DESWIK_MCP_PYTHON = 'C:\Program Files\LibreOffice\program\python.exe'
-dotnet build 'deswik-mcp\src\Deswik.Addin\Deswik.Addin.csproj' -c Release -p:DeswikDir="$deswikDir" -v:q -clp:ErrorsOnly
+$pythonExe = (Get-Command python -ErrorAction SilentlyContinue).Source
+if (-not $pythonExe) { $pythonExe = Read-Host 'Full path to python.exe' }
+if (-not [IO.Path]::IsPathFullyQualified($pythonExe) -or -not (Test-Path $pythonExe)) { throw 'A full path to python.exe is required.' }
+$env:DESWIK_MCP_PYTHON = $pythonExe
+& $dotnetExe build 'deswik-mcp\src\Deswik.Addin\Deswik.Addin.csproj' -c Release -p:DeswikDir="$deswikDir" -v:q -clp:ErrorsOnly
 if ($LASTEXITCODE -ne 0) { throw 'Add-in build failed.' }
-dotnet build 'deswik-mcp\src\Deswik.Bridge.Standalone' -c Release -p:DeswikDir="$deswikDir" -v:q -clp:ErrorsOnly
+& $dotnetExe build 'deswik-mcp\src\Deswik.Bridge.Standalone' -c Release -p:DeswikDir="$deswikDir" -v:q -clp:ErrorsOnly
 if ($LASTEXITCODE -ne 0) { throw 'Bridge build failed.' }
-dotnet build 'deswik-mcp\src\Deswik.Mcp.Server' -c Release -v:q -clp:ErrorsOnly
+& $dotnetExe build 'deswik-mcp\src\Deswik.Mcp.Server' -c Release -v:q -clp:ErrorsOnly
 if ($LASTEXITCODE -ne 0) { throw 'MCP server build failed.' }
 & '.\deswik-mcp\src\Deswik.Bridge.Standalone\bin\Release\net8.0\Deswik.Bridge.Standalone.exe'
 ```
 
 In Deswik.CAD, load the rebuilt Release `Deswik.Addin.dll`, open the saved
-disposable drawing, and confirm the dock panel says connected. In PowerShell
-window 2, start a real MCP stdio process and define a small client:
+disposable drawing, and confirm the dock panel says connected. Open PowerShell
+window 2 in the same plugin folder, then start a real MCP stdio process and
+define a small client:
 
 ```powershell
 $mcpExe = (Resolve-Path '.\deswik-mcp\src\Deswik.Mcp.Server\bin\Release\net8.0\Deswik.Mcp.Server.exe').Path
@@ -225,7 +253,7 @@ function Invoke-Mcp([string]$Method, [hashtable]$Params) {
   $mcp.StandardInput.Flush()
   $line = $mcp.StandardOutput.ReadLine()
   if ([string]::IsNullOrWhiteSpace($line)) { throw 'MCP server returned no response.' }
-  $line | ConvertFrom-Json -Depth 30
+  $line | ConvertFrom-Json
 }
 $initialized = Invoke-Mcp 'initialize' @{ protocolVersion='2025-11-25'; capabilities=@{}; clientInfo=@{ name='phase-7-acceptance'; version='1' } }
 $mcp.StandardInput.WriteLine('{"jsonrpc":"2.0","method":"notifications/initialized"}')
@@ -236,7 +264,7 @@ $initialized | ConvertTo-Json -Depth 10
 **Stop** unless the response names `deswik-workflow-bridge`, returns protocol
 `2025-11-25`, and advertises the `tools` capability.
 
-1. [ ] **Exact typed catalogue.** Run:
+1. [x] **Exact typed catalogue.** Run:
 
    ```powershell
    $listed = Invoke-Mcp 'tools/list' @{}
@@ -249,7 +277,7 @@ $initialized | ConvertTo-Json -Depth 10
    writer, demo route, `map.generate`, or `map.install` appears; stop and save
    the response.
 
-2. [ ] **Live read round-trip.** Run:
+2. [x] **Live read round-trip.** Run:
 
    ```powershell
    $document = Invoke-Mcp 'tools/call' @{ name='get_cad_document'; arguments=@{} }
@@ -260,7 +288,7 @@ $initialized | ConvertTo-Json -Depth 10
    identifies the active disposable drawing. Disprove: demo data, another
    drawing, a missing mode, or a disconnected/unsupported result.
 
-3. [ ] **Unapproved and tokenless writes fail closed.** Note the production
+3. [x] **Unapproved and tokenless writes fail closed.** Note the production
    hole count in the disposable test area, then run:
 
    ```powershell
@@ -275,7 +303,7 @@ $initialized | ConvertTo-Json -Depth 10
    drawing remains unchanged. Any new production geometry is an unexpected
    failure: stop and inspect it without deleting by layer.
 
-4. [ ] **Human-approved MCP commit and rollback.** First verify
+4. [x] **Human-approved MCP commit and rollback.** First verify
    `_MCP_PREVIEW` is clean using the Phase 4 procedure. Choose a test point in
    an empty area of the saved disposable drawing and adjust the three points
    below if necessary. Run the preview call, then switch to Deswik and choose
@@ -337,9 +365,9 @@ $mcp.Dispose()
 - A standalone `python.exe` was not on `PATH`. The installed LibreOffice
   Python 3.12.13 runtime was compatible and passed both dependency-free Python
   suites, so it was used by absolute path.
-- No live MCP client/Deswik observations have been supplied yet; those are the
-  pending human acceptance results, not missing build inputs.
+- The user reported all four live MCP client/Deswik checks passed on
+  2026-09-29; no detailed transcript was supplied.
 
 ## Open questions
 
-None for the buildable Phase 7 scope. Human acceptance checks 1–4 remain.
+None for Phase 7.

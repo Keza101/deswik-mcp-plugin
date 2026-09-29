@@ -13,20 +13,16 @@
 
 ## Current gate
 
-Phase 7 buildable work is complete, but Phase 7 is **not human-accepted yet**.
-Do not start Phase 8 until the user directly reports the results of all four
-unticked checks in `phase-7-mcp-adapter.md`:
+Phase 7 is human-accepted. The user reported “phase 7 passes” on 2026-09-29,
+covering the four checks in `phase-7-mcp-adapter.md`:
 
 1. exactly 20 typed MCP tools;
 2. live `get_cad_document` against the disposable drawing;
 3. unapproved and tokenless writes refused with no geometry change;
 4. one human-approved MCP commit followed by its exact-handle rollback.
 
-If the user reports a failure, diagnose and repair Phase 7 only, rerun the
-automated gates, and update its write-up. If all four pass, update the Phase 7
-write-up and status board with the user's observed acceptance. Respect the
-project's one-phase-per-run rule: acceptance closeout and Phase 8 should not be
-silently combined if the applicable instructions require a stop.
+The Phase 7 write-up and status board record the user's acceptance. The next
+separate run may begin Phase 8 under the project's one-phase-per-run rule.
 
 ## Verified automated state
 
@@ -47,7 +43,7 @@ The ignored `.phase6-build` directory at repository root contains only about
 
 ## Phase 8 boundary
 
-Only after Phase 7 is directly accepted, Phase 8 is the three-node pilot:
+Phase 8 is the three-node pilot:
 `Inspect stope`, `Preview rings`, and `Approve write`. Node 3 must be a real
 human gate that shows the change manifest and permits token minting only after
 operator action. Geometry mathematics must stay in the deterministic library
