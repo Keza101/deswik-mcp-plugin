@@ -27,7 +27,7 @@ public static class McpToolCatalog
                 ["description"] = "Deswik entity handle",
                 ["oneOf"] = new object[]
                 {
-                    new Dictionary<string, object> { ["type"] = "integer", ["minimum"] = 0 },
+                    new Dictionary<string, object> { ["type"] = "integer", ["minimum"] = 1 },
                     new Dictionary<string, object> { ["type"] = "string", ["minLength"] = 1 },
                 },
             },
@@ -59,6 +59,8 @@ public static class McpToolCatalog
         new McpToolDefinition("get_cad_polyface_info", "Return mesh statistics and bounds for one polyface.", Handle),
         new McpToolDefinition("get_cad_polyface_geometry", "Return one bounded page of raw polyface vertices and face indexes; not design-ready.", GeometryPageSchema()),
         new McpToolDefinition("get_cad_polyline_geometry", "Return one bounded page of polyline vertices and its closed flag; not design-ready.", GeometryPageSchema()),
+        new McpToolDefinition("get_cad_points_geometry", "Return one bounded page from a native Points collection with raw display metadata; not design-ready.", GeometryPageSchema()),
+        new McpToolDefinition("get_cad_figure_geometry", "Return raw native geometry and user attributes for one line, circle, arc, point, text, or multiline-text handle; not design-ready.", Handle),
         new McpToolDefinition("get_cad_polylines_under", "Return polylines below a layer subtree.",
             Schema(("layerPrefix", String("Layer subtree prefix")), required: new[] { "layerPrefix" })),
         new McpToolDefinition("get_cad_blasthole_details", "Return native BlastHole fields for one handle.", Handle),
@@ -152,7 +154,7 @@ public static class McpToolCatalog
                 {
                     "get_cad_document", "get_cad_layers", "get_cad_layer_attributes",
                     "get_cad_elements", "get_cad_selection", "get_ug_selection_context", "get_cad_polyface_info",
-                    "get_cad_polyface_geometry", "get_cad_polyline_geometry",
+                    "get_cad_polyface_geometry", "get_cad_polyline_geometry", "get_cad_points_geometry", "get_cad_figure_geometry",
                     "get_cad_polylines_under", "get_cad_blasthole_details",
                     "get_cad_ugdrillhole_details", "commit_ugdrillholes", "rollback_ugdrillholes",
                 },

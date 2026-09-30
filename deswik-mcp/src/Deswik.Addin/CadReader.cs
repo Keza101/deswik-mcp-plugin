@@ -151,8 +151,8 @@ internal class CadReader
         if (fig.IsArc) return "Arc";
         if (fig.IsPoint) return "Point";
         if (fig.IsPoints) return "Points";
-        if (fig.IsText) return "Text";
         if (fig.IsMText) return "MText";
+        if (fig.IsText) return "Text";
         if (fig.IsInsert) return "Insert";
         if (fig.IsImage) return "Image";
         if (fig.IsUGDrillHole) return "UGDrillHole";
@@ -476,6 +476,143 @@ internal class CadReader
         return new PolylineGeometryPage(1, request.Handle, request.Start, request.Limit,
             vertexCount, vertices, polyline.Closed, request.NextStart(vertexCount),
             "unknown", "unknown", false);
+    }
+
+    public PointsGeometryPage GetPointsGeometryPage(GeometryPageRequest request)
+    {
+        var figure = FindByHandle(request.Handle);
+        if (!figure.IsPoints)
+            throw new ArgumentException($"Figure {request.Handle} is not a Points collection (it is {FigureType(figure)})");
+        var collection = figure.asPoints;
+        var insertionPoints = collection.InsertionPoints;
+        var pointCount = insertionPoints.Count;
+        var pageCount = request.CountFor(pointCount);
+        var points = new List<Point3>(pageCount);
+        for (var i = request.Start; i < request.Start + pageCount; i++)
+        {
+            var point = insertionPoints[i];
+            if (!double.IsFinite(point.x) || !double.IsFinite(point.y) || !double.IsFinite(point.z))
+                throw new InvalidOperationException($"Points collection entry {i} has non-finite coordinates");
+            points.Add(new Point3(point.x, point.y, point.z));
+        }
+        var extrusion = collection.ExtrusionVector;
+        if (!double.IsFinite(extrusion.x) || !double.IsFinite(extrusion.y) || !double.IsFinite(extrusion.z) ||
+            !double.IsFinite(collection.AlignToViewSize))
+            throw new InvalidOperationException("Points collection metadata contains non-finite values");
+        return new PointsGeometryPage(1, request.Handle, request.Start, request.Limit,
+            pointCount, points, request.NextStart(pointCount), collection.IsPointCloud,
+            collection.PointStyle, collection.SizeType, collection.AlignToView,
+            collection.AlignToViewSize, new Point3(extrusion.x, extrusion.y, extrusion.z),
+            "unknown", "unknown", false);
+    }
+
+    public FigureGeometrySnapshot GetFigureGeometry(FigureGeometryRequest request)
+    {
+        var figure = FindByHandle(request.Handle);
+        var type = FigureType(figure);
+        if (!FigureGeometrySnapshot.SupportedTypes.Contains(type))
+            throw new ArgumentException($"Figure {request.Handle} has unsupported geometry type {type}");
+
+        var result = new FigureGeometrySnapshot
+        {
+            Handle = request.Handle,
+            Guid = figure.GUID?.ToString() ?? "",
+            Type = type,
+            Layer = TryRead(() => figure.Layer?.Name),
+            Label = TryRead(() => figure.Label),
+            Attributes = ReadAttributes(figure),
+        };
+
+        switch (type)
+        {
+            case "Line":
+                var line = figure.asLine;
+                result = result with
+                {
+                    StartPoint = Point(line.StartPoint), EndPoint = Point(line.EndPoint),
+                    ExtrusionVector = Vector(line.ExtrusionVector), Length = line.Length,
+                    Area = line.Area, Thickness = line.Thickness,
+                };
+                break;
+            case "Circle":
+                var circle = figure.asCircle;
+                result = result with
+                {
+                    CenterPoint = Point(circle.CenterPoint), ExtrusionVector = Vector(circle.ExtrusionVector),
+                    Radius = circle.Radius, Length = circle.Length, Area = circle.Area,
+                    Thickness = circle.Thickness, AlignToView = circle.AlignToView,
+                };
+                break;
+            case "Arc":
+                var arc = figure.asArc;
+                result = result with
+                {
+                    CenterPoint = Point(arc.CenterPoint), ExtrusionVector = Vector(arc.ExtrusionVector),
+                    Radius = arc.Radius, StartAngle = arc.StartAngle, EndAngle = arc.EndAngle,
+                    Thickness = arc.Thickness,
+                };
+                break;
+            case "Point":
+                var point = figure.asPoint;
+                result = result with
+                {
+                    InsertionPoint = Point(point.InsertionPoint), ExtrusionVector = Vector(point.ExtrusionVector),
+                };
+                break;
+            case "Text":
+                var text = figure.asText;
+                result = result with
+                {
+                    InsertionPoint = Point(text.InsertionPoint), AlignmentPoint = Point(text.AlignmentPoint),
+                    ExtrusionVector = Vector(text.ExtrusionVector), Text = text.TextString,
+                    Height = text.Height, Rotation = text.Rotation, Thickness = text.Thickness,
+                    AlignToView = text.AlignToView,
+                };
+                break;
+            case "MText":
+                var mtext = figure.asMText;
+                result = result with
+                {
+                    InsertionPoint = Point(mtext.InsertionPoint), ExtrusionVector = Vector(mtext.ExtrusionVector),
+                    Text = mtext.TextString, Height = mtext.Height, Rotation = mtext.Rotation,
+                    Thickness = mtext.Thickness, AlignToView = mtext.AlignToView,
+                };
+                break;
+        }
+        return result.Validate();
+    }
+
+    private static Point3 Point(Deswik.Graphics.Geometry.Point point) => new(point.x, point.y, point.z);
+    private static Point3 Vector(Deswik.Graphics.Geometry.Vector vector) => new(vector.x, vector.y, vector.z);
+
+    private static T? TryRead<T>(Func<T?> read)
+    {
+        try { return read(); } catch { return default; }
+    }
+
+    private static IReadOnlyDictionary<string, object?> ReadAttributes(DwFigure figure)
+    {
+        var values = new SortedDictionary<string, object?>(StringComparer.Ordinal);
+        try
+        {
+            if (figure.Layer?.Attributes is not System.Collections.IEnumerable definitions) return values;
+            foreach (var definition in definitions)
+            {
+                if (definition == null) continue;
+                var name = definition.GetType().GetProperty("Name")?.GetValue(definition)?.ToString();
+                if (string.IsNullOrWhiteSpace(name)) continue;
+                try
+                {
+                    var value = figure.AttributeValueGet(name, null);
+                    if (value != null)
+                        values[name] = value is string or bool or int or long or double or float
+                            ? value : value.ToString();
+                }
+                catch { }
+            }
+        }
+        catch { }
+        return values;
     }
 
     /// <summary>

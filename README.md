@@ -85,7 +85,7 @@ The job ID is valid only for the current bridge process. See
 `docs/Wire-Protocol.md` for the action allowlist, deadlines, and cancellation
 states.
 
-The stdio MCP adapter exposes 23 typed tools: live CAD reads, the guarded
+The stdio MCP adapter exposes 25 typed tools: live CAD reads, the guarded
 preview/approval/commit/rollback flow, async job controls, and read-only
 Process Map inspection. It does not expose legacy CAD writers or the
 file-producing `map.generate` and `map.install` actions. A direct or async
@@ -93,6 +93,14 @@ production CAD write is refused before reaching the bridge unless its tool
 arguments contain a human-minted single-use token.
 
 ## Run
+
+For the current live acceptance milestone, close Deswik.CAD and any old bridge,
+then double-click `Run-Deswik-Tests.cmd` in the repository root. This is the
+single reusable launcher for future milestones: update it in place rather than
+adding launchers to the root. It builds and checks the add-in and bridge, starts
+the bridge in its own window, and opens a guided test window. Test intent and
+reported results are archived in the applicable `docs/bridge-phases/` write-up.
+The launcher uses PowerShell 7 (`pwsh`) for the .NET add-in preflight.
 
 1. Open PowerShell in this repository folder and start the built bridge:
 
@@ -114,6 +122,8 @@ dsw get_cad_selection
 dsw get_ug_selection_context
 dsw get_cad_polyface_geometry @{ handle=1648; start=0; limit=25 }
 dsw get_cad_polyline_geometry @{ handle=42; start=0; limit=25 }
+dsw get_cad_points_geometry @{ handle=84; start=0; limit=25 }
+dsw get_cad_figure_geometry @{ handle=43 }
 ```
 
 Port `9595` is a raw JSON-over-TCP endpoint, not a website. Do not open it in
@@ -136,6 +146,16 @@ normalized or approved for design calculations.
 `get_cad_polyline_geometry` reads up to 500 vertices per page from one exact
 polyline handle and returns its native `closed` flag. It does not establish
 units, coordinate system, or suitability for design calculations.
+
+`get_cad_points_geometry` reads up to 500 insertion points per page from one
+native Points collection and preserves its raw point-cloud and display
+metadata. A separate single Point is not a Points collection. Units and
+coordinate system remain unknown and the result is never design-ready.
+
+`get_cad_figure_geometry` reads native fields and user attributes for one exact
+Line, Circle, Arc, Point, Text, or MText handle. Native coordinate, distance,
+and angle conventions remain explicitly unknown, and the result is never
+design-ready.
 
 For an MCP client, configure the built stdio executable while leaving the
 bridge running separately:

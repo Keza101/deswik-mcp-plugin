@@ -22,8 +22,13 @@ The opt-in polyface metrics and temporary operator-supplied role labels also
 passed four live checks on 2026-09-29. Full geometry and verified role mapping
 are still outstanding. The `get_cad_polyface_geometry` action reads bounded
 pages of raw vertices and face indexes; its original four live checks passed.
-Expanded polyface regression checks and the new paged polyline read are pending
-in `phase-8-underground-roadmap.md`, grouped into one CAD session.
+Expanded polyface regression checks and the new paged polyline read passed the
+reusable launcher suite on 2026-09-29. Raw Line, Circle, Arc, Point, Text, and
+MText geometry is the current pending live gate. Always update the single root
+`Run-Deswik-Tests.cmd`; never add another root launcher. Archive test intent and
+human results in `phase-8-underground-roadmap.md`, and maximize meaningful
+valid, boundary, refusal, stress, and no-mutation coverage rather than targeting
+four checks.
 The user also approved the tracked synthetic donor for the eventual pilot.
 
 ## Verified automated state
@@ -33,19 +38,27 @@ The user also approved the tracked synthetic donor for the eventual pilot.
   starting the bridge on another machine.
 - `tests/test_roundtrip.py`: `ALL TESTS PASSED`.
 - `tests/test_commands.py`: `ALL TESTS PASSED`.
-- Release builds for Addin, Bridge.Standalone, and Deswik.Mcp.Server succeeded
-  with zero errors using the isolated `.phase8-build` output.
-- The executable C# harness passed all 34 checks, including a real MCP stdio
-  subprocess connected to a fake loopback TCP bridge and geometry-page
-  invariants.
+- The optional `tests/test_phase6_tcp.py` smoke test passed against an isolated
+  bridge on its disposable port.
+- Isolated Release builds for the updated Addin and bridge-test harness
+  succeeded with zero errors while the accepted CAD session held the normal
+  output DLL.
+- The executable C# harness passed all 36 checks, including a real MCP stdio
+  subprocess connected to a fake loopback TCP bridge, geometry-page invariants,
+  strict six-type simple-figure geometry contracts, and bounded native Points
+  collection paging with raw display metadata.
 - Isolated live bridge processes passed fake-addin registration and
   `get_ug_selection_context`, `get_cad_polyface_geometry`, and
-  `get_cad_polyline_geometry` routing checks on temporary loopback ports.
+  `get_cad_polyline_geometry` routing checks on temporary loopback ports. The
+  new Points route is covered by the MCP adapter harness and awaits live CAD.
 - `git diff --check` passed.
 
-The Phase 8 files are uncommitted. `main` is one commit ahead of `origin/main`
-from Phase 7. The profile and selection-snapshot gates are accepted; full
-CTX-01 and the pilot are not. Do not push without a new request.
+The current Phase 8 geometry files are uncommitted. `main` and
+`origin/main` were both at `d678579` before these changes. Earlier profile,
+selection, role/metric, polyface/polyline, and mixed simple-figure gates are
+accepted, with native Line recorded as an automated-only gap. The new Points
+collection live gate, full CTX-01, and the pilot are not. Do not push without a
+new request.
 
 ## Phase 8 boundary
 

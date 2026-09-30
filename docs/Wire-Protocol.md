@@ -61,6 +61,12 @@ The bridge routes each incoming action to the add-in that registered it.
 **Last registration wins** — if two add-ins claim the same action, the later
 one silently takes over, so keep capability sets disjoint.
 
+`get_cad_figure_geometry` accepts exactly one positive decimal handle or a
+`0x`-prefixed hexadecimal handle. It returns schema-versioned native fields and
+user attributes for Line, Circle, Arc, Point, Text, or MText. It refuses other
+figure types and unknown or malformed handles. Coordinate, distance, and angle
+units remain `unknown`, and `readyForDesign` is always false.
+
 ## Process Map sidecar
 
 The bridge owns an exact allowlist of local SDK actions and starts the pinned
@@ -119,7 +125,8 @@ forgets all IDs; polling an old ID fails with `job_unknown`.
 The exact `job.submit` set is `get_cad_document`, `get_cad_layers`,
 `get_cad_layer_attributes`, `get_cad_elements`, `get_cad_selection`,
 `get_ug_selection_context`, `get_cad_polyface_info`,
-`get_cad_polyface_geometry`, `get_cad_polyline_geometry`,
+`get_cad_polyface_geometry`, `get_cad_polyline_geometry`, `get_cad_points_geometry`,
+`get_cad_figure_geometry`,
 `get_cad_polylines_under`,
 `get_cad_blasthole_details`, `get_cad_ugdrillhole_details`,
 `commit_ugdrillholes`, and `rollback_ugdrillholes`. A commit or rollback
@@ -149,12 +156,13 @@ delimited JSON-RPC 2.0 on stdin/stdout and supports the `2025-11-25`,
 clients. The server advertises only the `tools` capability; logs and bridge
 traffic never use stdout.
 
-`tools/list` returns an exact 23-tool catalogue:
+`tools/list` returns an exact 25-tool catalogue:
 
 - CAD reads: `get_cad_document`, `get_cad_layers`,
   `get_cad_layer_attributes`, `get_cad_elements`, `get_cad_selection`,
   `get_ug_selection_context`, `get_cad_polyface_info`,
   `get_cad_polyface_geometry`, `get_cad_polyline_geometry`,
+  `get_cad_points_geometry`, `get_cad_figure_geometry`,
   `get_cad_polylines_under`,
   `get_cad_blasthole_details`, and `get_cad_ugdrillhole_details`.
 - Guarded workflow: `preview_ugdrillholes`, `get_write_approval`,
@@ -184,6 +192,7 @@ dsw get_ug_selection_context
 dsw get_ug_selection_context @{ roles=@{ '0x670'='stope' }; includePolyfaceMetrics=$true }
 dsw get_cad_polyface_geometry @{ handle='0x670'; start=0; limit=25 }
 dsw get_cad_polyline_geometry @{ handle=42; start=0; limit=25 }
+dsw get_cad_points_geometry @{ handle=84; start=0; limit=25 }
 dsw preview_ugdrillholes @{ holes=@(@{ pivot=@(0,0,0); collar=@(0,0,1); toe=@(0,0,10); holeId="H1" }) }
 dsw map.inspect @{ path=(Resolve-Path 'tests\archive_ddf\SDK - Stope Design Layout.ddf').Path }
 ```
@@ -213,3 +222,10 @@ response declares unknown units and coordinate system and
 request bounds for one polyline. It returns `vertexCount`, a bounded
 `vertices` page, the native `closed` flag, and `nextStart`. It also declares
 unknown units and coordinate system and `readyForDesign: false`.
+
+`get_cad_points_geometry` uses the same bounds for one native `Points`
+collection. It returns `pointCount`, a bounded `points` page, `nextStart`, and
+raw `isPointCloud`, `pointStyle`, `sizeType`, `alignToView`,
+`alignToViewSize`, and `extrusionVector` metadata. It refuses separate single
+Point and non-Points entities, declares unknown units and coordinate system,
+and always returns `readyForDesign: false`.

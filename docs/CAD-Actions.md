@@ -15,6 +15,10 @@ optional (default in parentheses). Geometry is in world coordinates; entity
 | `get_cad_layer_attributes` | `layer`, `limit?` (10000) | entities incl. attribute data |
 | `get_cad_selection` | — | currently selected entities with geometry |
 | `get_cad_polyface_info` | `handle` | polyface mesh stats/bounds |
+| `get_cad_polyface_geometry` | `handle`, `start?`, `limit?` | bounded raw vertex/face page |
+| `get_cad_polyline_geometry` | `handle`, `start?`, `limit?` | bounded vertex page and native closed flag |
+| `get_cad_points_geometry` | `handle`, `start?`, `limit?` | bounded native Points collection page and raw display metadata |
+| `get_cad_figure_geometry` | `handle` | raw Line/Circle/Arc/Point/Text/MText geometry and user attributes |
 | `get_cad_polylines_under` | `layerPrefix` | all polylines under a layer subtree |
 | `get_cad_blasthole_details` | `handle` | BlastHole entity fields |
 | `get_cad_ugdrillhole_details` | `handle` | UGDrillHole entity fields |
@@ -45,6 +49,9 @@ create native Deswik.UGDB-compatible entities, which need `Hole` (ID) and
 
 ## Notes
 
+- Live acceptance uses the single reusable root `Run-Deswik-Tests.cmd`. Update
+  it in place for each milestone, maximize valid/boundary/refusal/stress and
+  no-mutation coverage, and archive intent/results in the phase write-up.
 - Preview, commit, and rollback run on the CAD UI thread.
 - Preview refuses `preview_layer_dirty` when `_MCP_PREVIEW` contains a handle
   outside the current in-process preview record.

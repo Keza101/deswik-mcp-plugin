@@ -13,15 +13,20 @@ in progress — the synthetic profile editor and read-only selected-design
 snapshot each passed four live Deswik.CAD checks reported by the user on
 2026-09-29. Temporary operator labels and opt-in polyface metrics also passed
 four live CAD checks reported by the user. The bounded raw polyface-geometry
-read passed its original four live checks; broader geometry regression checks
-and the new bounded polyline read await CAD acceptance. Verified semantic roles, the
-remaining geometry types, the wider roadmap, and the final pilot remain open.
+read passed its original four live checks. The user reported the expanded
+polyface regression and bounded polyline launcher suite passed on 2026-09-29.
+The mixed simple-figure suite is accepted, with native Line explicitly recorded
+as an automated-only coverage gap because the installed CAD UI cannot create
+one normally. Bounded native Points collection reads are now built and await
+their broad live-CAD suite. Verified semantic roles, remaining geometry types,
+the wider roadmap, and the final pilot remain open.
 
 ## Changed files
 
 - `deswik-mcp/src/Deswik.Ug.Design/` — adds versioned synthetic profile schema, validation, and starter JSON.
 - `deswik-mcp/src/Deswik.Ug.Design/SelectionContext.cs` — types selected figures, source handles, and unverified design metadata.
 - `deswik-mcp/src/Deswik.Ug.Design/GeometryPages.cs` — validates bounded page requests and types raw polyface/polyline vertices and faces.
+- `deswik-mcp/src/Deswik.Ug.Design/FigureGeometry.cs` — types strict raw geometry snapshots for six simple figure types.
 - `deswik-mcp/src/Deswik.Addin/ProfileEditorForm.cs` — adds dock-panel profile editing and save-as controls.
 - `deswik-mcp/src/Deswik.Addin/ProfileFiles.cs` — writes new profile JSON without overwriting the source.
 - `deswik-mcp/src/Deswik.Addin/McpStatusControl.cs` and `Deswik.Addin.csproj` — expose the editor from the existing dock panel.
@@ -33,6 +38,7 @@ remaining geometry types, the wider roadmap, and the final pilot remain open.
 - `docs/workflow-bridge-status.html` — marks the profile milestone in progress.
 - `docs/bridge-phases/phase-8-underground-roadmap.md` — records the milestone and acceptance gate.
 - `README.md` and `docs/Wire-Protocol.md` — document the profile editor and context action.
+- `Run-Deswik-Tests.cmd` and `deswik-mcp/tools/*Deswik*Test*.ps1` — provide the single reusable root acceptance launcher and guided live suite.
 
 ## Behaviour
 
@@ -75,6 +81,20 @@ The existing layer-wide polyline read proves the installed API exposes these
 fields, but only live CAD acceptance can verify behavior on real drawings.
 No role, units, coordinate system, or design-ready status is inferred.
 
+`get_cad_figure_geometry` now accepts one exact decimal or `0x`-prefixed
+handle and returns a schema-versioned snapshot for Line, Circle, Arc, Point,
+Text, or MText. The snapshot contains the verified native fields available for
+that type plus user attributes read from the figure's layer definitions. It
+rejects unknown parameters and unsupported figure types, preserves unknown
+coordinate/distance/angle conventions, and can never claim design readiness.
+
+`get_cad_points_geometry` uses the existing strict bounded page request for one
+native `Points` collection. It returns up to 500 raw insertion points plus the
+native point-cloud flag, point style, size type, align-to-view state and size,
+and extrusion vector. It refuses a single `Point`, a `Polyline`, malformed
+requests, and unknown handles; units and coordinate system remain unknown and
+the response is never design-ready.
+
 The final pilot remains deferred. Current `ProcessMapActionPolicy` permits
 only `MCP_READ_DOCUMENT`, and `LoopbackBridgeRequester` sends empty
 parameters. The existing `preview_ugdrillholes` action opens the approval
@@ -110,7 +130,7 @@ container has no opaque tail, and the scan found no path or email markers.
 Validation returned no warnings; both Python suites printed
 `ALL TESTS PASSED`. The design library built with 0 errors; the Addin built
 with 0 errors and existing Deswik reference warnings; the C# harness passed
-all 34 checks, including profile save-as, selection-context invariants,
+all 35 checks, including profile save-as, selection-context invariants,
 operator-role validation, polyface paging, and polyline paging. The editor
 form constructor also loaded from the built Addin assembly. These checks do
 not replace live Deswik.CAD acceptance.
@@ -121,6 +141,29 @@ registration-and-routing checks. A fake add-in received forwarded
 `get_cad_polyline_geometry` requests; callers
 received the add-in responses with `mode: live`. These checks cover transport
 routing, not real CAD selection or geometry capture.
+
+For the mixed simple-figure milestone, the two Python regression suites again
+printed `ALL TESTS PASSED`. Isolated Release builds of the Addin and bridge-test
+harness completed with 0 errors (the existing dependency-version warnings
+remain), and the executable harness passed all 35 checks, including strict
+simple-figure request parsing, all six type discriminators, finite-value
+validation, raw/not-design-ready enforcement, MCP catalogue/routing, and async
+job allowlisting. PowerShell parsed the reusable setup, bridge, guided-live-test,
+and preflight scripts without errors. A normal output build was deliberately
+not forced while the user's accepted CAD session held the loaded DLL; the root
+launcher requires CAD to be closed before rebuilding.
+
+For the Points collection milestone, reflection against the installed 2025.2
+`Deswik.Graphics.dll` verified the native `Points.InsertionPoints`,
+`VertexCount`, point-cloud, style, size, alignment, and extrusion members before
+implementation. Isolated Release builds of the Addin and bridge-test harness
+completed with 0 errors; the existing dependency-version warnings remain. The
+expanded executable harness passed all 36 checks. `test_roundtrip.py` and
+`test_commands.py` printed `ALL TESTS PASSED`. The optional Phase 6 TCP smoke
+test passed against an isolated bridge after the bridge was started on its
+disposable port. All four launcher PowerShell scripts parse without errors.
+The launcher now runs both Python suites automatically before the C# harness
+and add-in preflight.
 
 ## Constraint check
 
@@ -408,7 +451,12 @@ the plugin folder and load `dsw`:
    $before -eq $after
    ```
 
-## Current acceptance — combined geometry session (pending)
+## Accepted — combined geometry session
+
+The user reported on 2026-09-29 that every check printed by the launcher passed,
+including the manual CAD comparison. The exact test intent and manual fallback
+remain archived below. The launcher has since been renamed and advanced to the
+next milestone; use `Run-Deswik-Tests.cmd` for the current suite.
 
 This batch checks the polyface edge cases and the new polyline action in **one
 CAD/bridge run**. You do not need to restart the server between checks. The
@@ -420,17 +468,23 @@ normal polyline tool and save the drawing before starting the read checks.
 Know whether the polyline is open or closed from CAD's Properties
 panel. None of these commands writes drawing geometry.
 
-1. [ ] **Start once.** Close Deswik.CAD and stop any old bridge with `Ctrl+C`.
-   From the plugin repository root, run the build commands at the start of the
-   preceding accepted section **once**, then start the bridge there. Open
-   Deswik.CAD, load the newly built Addin DLL, and open the disposable drawing.
-   In a second PowerShell window in the same repository folder run:
+1. [x] **Start once.** Close Deswik.CAD and stop any old bridge with `Ctrl+C`.
+   Double-click `Run-Deswik-Tests.cmd` in the plugin repository root.
+   It runs the Release builds, deterministic harness, and add-in preflight;
+   starts the bridge in its own window; then opens an interactive test window.
+   Follow that window's prompts to load the newly built Addin DLL, open the
+   disposable drawing, clear the selection, and then select the fixtures. The
+   launcher performs checks 2–4 below and prints the final failure count.
+
+   For a manual fallback, run the build commands at the start of the preceding
+   accepted section **once**, start the bridge there, and load the newly built
+   Addin DLL in Deswik.CAD. In a second PowerShell window in the repository run:
 
    ```powershell
    . .\deswik-mcp\tools\deswik.ps1
    ```
 
-2. [ ] **Empty selection and missing handle.** Clear the CAD selection (press
+2. [x] **Empty selection and missing handle.** Clear the CAD selection (press
    `Esc` until no figures are highlighted). In the second PowerShell window,
    run the block below. It must print two green `PASS` lines. An empty
    selection must remain empty, and a geometry request with no handle must
@@ -443,7 +497,7 @@ panel. None of these commands writes drawing geometry.
    if (-not $missing.success -and $missing.errorCode -eq 'invalid_geometry_request') { Write-Host 'PASS missing handle refused' -ForegroundColor Green } else { Write-Host 'FAIL missing handle' -ForegroundColor Red }
    ```
 
-3. [ ] **Select the fixtures once.** In CAD select the large polyface and one
+3. [x] **Select the fixtures once.** In CAD select the large polyface and one
    polyline together. Do not restart either application. Run this single block
    in the second PowerShell window. It prints a coloured result for every
    check, including first/middle/final/beyond-end pages, a 500-entry mesh
@@ -509,11 +563,92 @@ panel. None of these commands writes drawing geometry.
    $l0 | Select-Object handle,vertexCount,closed,coordinateSystem,units | Format-List
    ```
 
-4. [ ] **Compare with CAD.** Confirm the printed polyline `closed` value
+4. [x] **Compare with CAD.** Confirm the printed polyline `closed` value
    matches CAD Properties and the returned first vertex coordinates match
    the selected polyline. Confirm the drawing's dirty/modified indicator did
    not change during the reads. These two visual checks cannot be proven by
    the bridge alone. Report the failure count and any red or yellow lines.
+
+## Accepted — mixed simple-figure geometry
+
+The user reported on 2026-09-29 that the updated suite passed with zero
+failures, including the CAD Properties comparison and no-mutation checks. The
+native Line case was not available from the installed Deswik UI and remains the
+documented automated-only coverage gap. The launcher has now advanced to the
+Points collection milestone.
+
+This milestone adds `get_cad_figure_geometry`, a strict read-only action for
+`Line`, `Circle`, `Arc`, `Point`, `Text`, and `MText`. It returns native geometry
+fields and user attributes with `coordinateSystem`, `units`, and `angleUnits`
+left `unknown`, and `readyForDesign: false`. It deliberately refuses other
+figure types, missing/zero/unknown handles, and extra parameters.
+
+Close Deswik.CAD and any old bridge, then double-click the same reusable root
+launcher:
+
+```powershell
+.\Run-Deswik-Tests.cmd
+```
+
+Use a saved disposable drawing containing one known Circle, Arc, Point, Text,
+MText, and Polyline. A native Line is optional because the user's installed
+Deswik UI does not expose a normal Line-creation tool; do not substitute a
+two-vertex Polyline. The guided console waits until all six required fixture
+types are selected together and also tests a native Line if one is available.
+It checks strict invalid-input refusals; every available supported
+discriminator; handle, GUID, and layer identity; required native fields; finite
+values; decimal/hex equivalence; user-attribute parity; wrong-reader and
+wrong-type refusals; 25 stable repeated reads per simple fixture; unchanged
+selection, entity counts, and dirty state; and a visual comparison against CAD
+Properties. This produces dozens of named assertions plus at least 125 stress
+reads before the manual comparison. The Line parser and geometry contract are
+still covered by the deterministic C# harness; live Line coverage remains an
+explicit evidence gap until a representative native entity is available.
+
+1. [x] Setup reports all deterministic and add-in preflight checks passed and
+   opens the bridge and guided test windows.
+2. [x] Empty-selection and all strict invalid-input refusal checks print green
+   `PASS` lines with no unexpected error.
+3. [x] Every assertion for Circle, Arc, Point, Text, and MText prints green,
+   including 25 stable repeated reads per fixture and attribute parity. If a
+   native Line is selected, its equivalent assertions also pass; otherwise the
+   console prints the documented yellow coverage note.
+4. [x] Wrong-type readers refuse every fixture, the selected Polyline is
+   refused by the simple-figure reader, and no refusal returns geometry data.
+5. [x] Selection handles, layer entity counts, and dirty state remain unchanged.
+6. [x] CAD Properties agree with every fixture's native values and the final
+   summary reports zero failures. Any mismatch fails acceptance.
+
+## Current acceptance — native Points collection paging (pending)
+
+The same root launcher now tests `get_cad_points_geometry`. Prepare a saved
+disposable drawing with one native `Points` collection containing 3–20 known
+points, one separate single `Point`, and one `Polyline`. The collection must be
+one entity; several separate Point entities are not equivalent.
+
+Double-click `Run-Deswik-Tests.cmd`. The launcher rebuilds and runs all
+deterministic checks, starts the bridge, and opens the guided live-test window.
+The suite performs strict malformed/missing/unknown-handle refusals; first,
+second, final, beyond-end, and maximum page checks; decimal/hex equivalence;
+finite coordinate and metadata checks; cross-reader and wrong-type refusals;
+50 stable full-page rereads; unchanged selection, layer counts, and dirty state;
+and a manual comparison of count, coordinates, and display metadata.
+
+1. [ ] Setup and all deterministic/preflight checks pass, then both live windows
+   open from the single root launcher.
+2. [ ] Empty selection remains empty and all eight invalid-request cases print
+   green `PASS` lines.
+3. [ ] Select exactly one 3–20-entry `Points` collection, one `Point`, and one
+   `Polyline`; the console identifies all three native types.
+4. [ ] Every page boundary, raw-status, finite-value, metadata, and decimal/hex
+   equivalence check passes.
+5. [ ] The full page remains byte-for-byte stable across 50 repeated reads.
+6. [ ] Single Point and Polyline are refused by the Points reader; the Points
+   collection is refused by the Polyline and simple-figure readers.
+7. [ ] Selection handles, layer entity counts, and drawing dirty state remain
+   unchanged.
+8. [ ] CAD Properties agree with point count, coordinates, point style, size
+   type, and align-to-view values; final failure count is zero.
 
 ## Future pilot specification — not runnable yet
 
@@ -526,6 +661,13 @@ a separate release and acceptance guide. Its checks will cover exact selected
 source handles and drawing identity, owned temporary preview geometry with
 calculation provenance, default-No operator approval and exact created handles,
 and refusal to approve without a matching preview.
+
+The pilot is governed by gates `G7`–`G9` in
+`docs/ug-mining-functionality-roadmap.md`. Passing it produces an evidence pack,
+not production authorization. Production use remains blocked until controlled
+readiness (`G10`), limited rollout (`G11`), and scope-specific expansion/change
+control (`G12`) are separately completed. Any pilot defect is returned to the
+gate that owns the failed contract rather than waived at pilot closeout.
 
 ## Missing inputs
 

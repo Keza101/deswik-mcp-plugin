@@ -125,6 +125,15 @@ later phase, put a beginner-level test walkthrough **inside that phase's write-u
 numbered acceptance checklist. Do not create or link a separate how-to-test guide. Leave earlier
 accepted phase write-ups alone unless the human specifically asks to revise them.
 
+For the current and every future live-CAD milestone, maintain exactly one reusable
+`Run-Deswik-Tests.cmd` in the repository root. Update that launcher and its helpers in place; never
+add phase- or feature-specific root launchers. It must run build/regression/preflight checks, start
+the bridge, and open a separate guided test window. Archive the test intent and human-reported result
+in the applicable phase write-up. Do not optimize for four acceptance items: exercise every
+meaningful valid type, boundary, invalid input, wrong-type refusal, repeatability/stress, transport,
+and no-mutation check available before the feature's truthful unsupported boundary. Group results
+into a readable numbered checklist without reducing the actual automated assertion count.
+
 Make each new phase write-up self-contained for someone using PowerShell and Deswik.CAD for the first
 time: state which PowerShell windows to open, the exact command to start or reuse the bridge, the
 working directory and client script to load, the required CAD/add-in/drawing state, and any saved

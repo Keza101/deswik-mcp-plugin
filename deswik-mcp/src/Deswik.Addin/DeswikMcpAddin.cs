@@ -317,6 +317,12 @@ public class DeswikMcpAddin
                 case "get_cad_polyline_geometry":
                     HandleGetCadPolylineGeometry(id, parameters);
                     break;
+                case "get_cad_points_geometry":
+                    HandleGetCadPointsGeometry(id, parameters);
+                    break;
+                case "get_cad_figure_geometry":
+                    HandleGetCadFigureGeometry(id, parameters);
+                    break;
                 case "slice_cad_polyface":
                     SendError(id, action, "Writer requires the guarded write flow", "forbidden_unfenced");
                     break;
@@ -989,6 +995,42 @@ public class DeswikMcpAddin
         catch (InvalidOperationException ex)
         {
             SendError(id, "get_cad_polyline_geometry", ex.Message, "geometry_unavailable");
+        }
+    }
+
+    private void HandleGetCadPointsGeometry(string id, System.Text.Json.JsonElement parameters)
+    {
+        try
+        {
+            var request = Deswik.Ug.Design.GeometryPageRequest.Parse(parameters);
+            var data = OnUiThread(() => RequireCadReader().GetPointsGeometryPage(request));
+            _bridgeClient?.SendAsync(new { id, action = "cad_points_geometry_result", data });
+        }
+        catch (ArgumentException ex)
+        {
+            SendError(id, "get_cad_points_geometry", ex.Message, "invalid_geometry_request");
+        }
+        catch (InvalidOperationException ex)
+        {
+            SendError(id, "get_cad_points_geometry", ex.Message, "geometry_unavailable");
+        }
+    }
+
+    private void HandleGetCadFigureGeometry(string id, System.Text.Json.JsonElement parameters)
+    {
+        try
+        {
+            var request = Deswik.Ug.Design.FigureGeometryRequest.Parse(parameters);
+            var data = OnUiThread(() => RequireCadReader().GetFigureGeometry(request));
+            _bridgeClient?.SendAsync(new { id, action = "cad_figure_geometry_result", data });
+        }
+        catch (ArgumentException ex)
+        {
+            SendError(id, "get_cad_figure_geometry", ex.Message, "invalid_geometry_request");
+        }
+        catch (InvalidOperationException ex)
+        {
+            SendError(id, "get_cad_figure_geometry", ex.Message, "geometry_unavailable");
         }
     }
 

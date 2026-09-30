@@ -18,7 +18,7 @@ standard.
 | Workstream | Current delivery state | Next gate |
 |---|---|---|
 | Platform reliability (`FND-01`–`FND-08`) | Partly built: stdio MCP, fail-closed modes, guarded writes, async jobs, and tests exist. Full schema/version coverage, audit, and compatibility cleanup remain. | Complete the missing foundation items and live acceptance. |
-| Design context and profiles (`CTX-01`–`CTX-06`) | The profile editor, snapshot, opt-in metrics with temporary roles, and raw polyface paging each passed four live checks. Expanded polyface regression and new polyline paging await CAD acceptance; full geometry, conventions, and approved-profile work remain. | Run the combined geometry acceptance session, then extract other figure types. |
+| Design context and profiles (`CTX-01`–`CTX-06`) | Profile, snapshot, role/metric, raw polyface, expanded polyface/polyline, and mixed simple-figure gates are accepted; native Line is an explicit automated-only gap. Bounded Points collection paging is built with a broad launcher suite pending. | Run the reusable Points collection acceptance launcher, then extract remaining native types. |
 | Drill-and-blast design (`DBD-01`–`DBD-09`) | Planned. Existing native-hole write is a guarded primitive, not a design calculator. | Build pure deterministic calculators against explicit profiles and test boundaries. |
 | Automated design QA (`QA-01`–`QA-04`) | Planned. | Gate every generated proposal with measured rules and issue reports. |
 | As-drilled and as-charged (`ACT-01`–`ACT-05`) | Planned. | Add approved import mappings and reconciliation before readiness claims. |
@@ -26,6 +26,78 @@ standard.
 | Operational integration (`OPS-01`–`OPS-05`) | Planned; Scheduler/LHS services are not verified live adapters. | Capture real provider contracts and pass live integration gates. |
 | AI workflows (`AI-01`–`AI-04`) | Planned. | Expose only deterministic, audited and approved actions. |
 | Final three-node Process Map pilot | Deferred until the preceding workstreams are accepted. | Run Inspect stope → Preview rings → Approve write on a saved disposable drawing. |
+
+## Delivery gates before, during, and after the pilot
+
+The feature phases below describe **what** is being built. These delivery gates
+describe **what evidence is required before the work may advance**. Gates are
+cumulative: passing a later test does not waive an earlier gate, and a failed or
+changed dependency returns the affected work to its owning gate.
+
+**Current position:** Gate `G1`, design context and geometry extraction. The
+profile, selection, role/metric, raw polyface, and expanded polyface/polyline
+live gates and the mixed simple-figure suite are accepted. Native Line remains
+an explicit automated-only gap until a representative entity is available. The
+next sub-gate is bounded native Points collection paging. Platform items still
+open in `G0` continue in parallel and must close before pilot packaging.
+
+`Foundation → context → approved standards → calculators → QA/write paths → actuals/integrations → AI boundary → pilot readiness → pilot → evidence review → controlled production → scale`
+
+| Gate | Required outcome and evidence | Current state | What it unlocks |
+|---|---|---|---|
+| `G0` Platform safety baseline | Versioned contracts; explicit live/demo/disconnected state; bounded jobs; owned preview, default-No approval, token-bound commit, exact-handle rollback; audit/provenance; supported-build compatibility; automated and live-CAD acceptance. | **In progress.** Core bridge safety is accepted; schema coverage, audit, compatibility cleanup, and remaining live acceptance are open. | A stable surface on which domain functions can be accepted. |
+| `G1` Complete design context | Bounded extraction for every supported native figure; drawing identity, source handles, units, coordinates, conventions, attributes, and selection state; refusal of unsupported or ambiguous input; no drawing mutation. | **In progress.** Mixed simple-figure live suite is next. | Trustworthy inputs for engineering calculations. |
+| `G2` Approved standards and typed domain | Versioned site profile and rule sources; explicit ownership and approval state; units and convention validation; synthetic profiles permanently marked test-only; mining-engineer approval for any production profile. | **Partly built.** Synthetic schema/editor exist; production standards are not approved. | Production-eligible calculator inputs. Synthetic profiles unlock test work only. |
+| `G3` Deterministic design calculators | Rise, box-hole, ring, deviation, charge, timing, and quantity calculations implemented as pure libraries with unit, boundary, invalid-input, golden, and repeatability tests. Every result records profile version, assumptions, warnings, and provenance. | **Planned.** | Candidate designs that can be rendered and checked without trusting CAD to calculate them. |
+| `G4` Design QA and guarded CAD writes | Rule-by-rule QA with measured evidence; issue locations and severity; CAD preview isolated from production geometry; explicit manifest; approval bound to drawing, sources, parameters, and preview; exact created handles and verified rollback. | **Planned.** Guarded write primitives exist but domain-wide QA/write coverage does not. | Safe end-to-end design workflows on disposable drawings. |
+| `G5` Actuals, performance, and operational integration | Approved import mappings; as-drilled/as-charged reconciliation; blast outcome and calibration records; verified Scheduler/LHS/provider contracts; truthful unavailable states; controlled reports and exports. | **Planned.** Existing Scheduler/LHS examples are not live adapters. | Full roadmap evidence rather than design-only evidence. |
+| `G6` AI and orchestration boundary | AI may structure requests and explain deterministic results, but cannot invent standards, bypass QA, infer safety clearance, mint approval, or write directly. All exposed actions are typed, audited, and already accepted below the AI layer. | **Planned.** | Safe assembly of the final Process Map pilot. |
+| `G7` Pilot release readiness | `G0`–`G6` closed; immutable pilot package and hashes; supported Deswik build recorded; disposable saved drawing and known fixtures; operator guide; recovery/rollback runbook; named operator, engineering reviewer, and evidence owner; rehearsed launcher and clean automated baseline. | **Deferred.** | Authorization to execute the three-node pilot. |
+| `G8` Three-node pilot execution | Run **Inspect stope → Preview rings → Approve write** in order. Capture exact source and created handles, drawing identity, profile/calculator/package versions, warnings, manifest, approval actor/time, rollback evidence, and refusal-path results. | **Deferred.** Pilot nodes are not built. | A pilot evidence pack; it does **not** authorize production use. |
+| `G9` Pilot evidence review | Reconcile the run record to the drawing; classify every defect and exception; reproduce or close failures; confirm no unowned mutation; obtain operator, engineering, and software-owner sign-off. Any critical safety or data-integrity defect sends work back to its owning gate. | **Post-pilot.** | A production release candidate, subject to operational readiness. |
+| `G10` Controlled production readiness | Approved production profiles and provider mappings; deployment package and integrity hashes; supported-build matrix; access controls; audit retention; monitoring; backup/recovery; rollback drill; training and support runbook; explicit scope, owner, and stop criteria. | **Post-pilot.** | A limited, reversible production rollout. |
+| `G11` Limited production rollout | Start with one approved site/build/workflow and named operators. Observe read/preview/commit/refusal/rollback telemetry, review every exception, and halt on stop criteria. No automatic expansion from pilot success. | **Post-pilot.** | Evidence for controlled expansion. |
+| `G12` Scale and continuous governance | Approve each additional site, Deswik build, profile, provider, and write workflow separately. Re-run automated and live gates after relevant changes; version and retain evidence; periodically rehearse recovery and revoke obsolete packages/profiles. | **Post-pilot.** | Sustained supported operation. |
+
+### How to interpret a gate
+
+- **Built** means code and automated checks exist; it is not live acceptance.
+- **Live accepted** means the user ran the current root launcher against the
+  supported Deswik build and the archived checks matched the real drawing.
+- **Engineering approved** means a qualified reviewer accepted the mine rules,
+  assumptions, limits, and production profile; a successful synthetic test does
+  not supply that approval.
+- **Pilot passed** means one controlled pilot evidence pack passed `G8` and
+  `G9`; it is not a general production release.
+- **Production ready** means `G10` has a named scope, owners, stop conditions,
+  monitoring, audit, recovery, and sign-off. Expansion still requires `G12`.
+
+### Evidence rules at every gate
+
+1. Run the broadest meaningful automated suite first, then live CAD checks.
+2. Use the single root `Run-Deswik-Tests.cmd`; rename/update that launcher for
+   the active suite instead of adding another root launcher.
+3. Test valid, boundary, refusal, repeatability, stale-state, wrong-drawing,
+   replay, cancellation, timeout, rollback, and no-mutation cases wherever the
+   milestone exposes them. Stop only when a real boundary prevents more useful
+   coverage, not after an arbitrary number such as four.
+4. Archive test intent, environment, input fixtures, expected results, observed
+   results, discrepancies, and disposition in the relevant phase document.
+5. A failed check blocks the gate. Fix and repeat the affected checks plus
+   regression coverage; do not edit the evidence into a pass.
+
+### Minimum pilot acceptance matrix
+
+| Path | Evidence required |
+|---|---|
+| Inspect success | Exact drawing identity and selected source handles; resolved units/conventions/profile; deterministic input snapshot; no mutation. |
+| Inspect refusal | Empty, mixed, unsupported, ambiguous, stale, or wrong-drawing selections fail clearly and expose no invented design state. |
+| Preview success | Owned temporary geometry only; calculation and QA provenance; complete warnings and manifest; repeatable output; production geometry unchanged. |
+| Preview refusal/recovery | Invalid profile, failed QA, cancellation, timeout, and bridge interruption leave no unowned residue and recover cleanly. |
+| Approval success | Default-No modal; explicit operator action; single-use token bound to the exact drawing, inputs, parameters, preview, and expiry; exact created handles recorded. |
+| Approval refusal | Missing/stale/mismatched preview, changed drawing or selection, wrong actor/session, expired token, and replay create nothing. |
+| Rollback | Only the recorded created handles are removed or restored; unrelated entities, attributes, selection, and drawing state remain unchanged. |
+| Audit closeout | Run record links source → calculation → QA → preview → approval → created handles → rollback/disposition with versions, times, and responsible people. |
 
 ## Current Foundation
 
@@ -38,7 +110,7 @@ standard.
 | Scheduler | Service code exists, but the CAD add-in deliberately does not register Scheduler capabilities |
 | LHS and generic CAD services | Mostly sample or placeholder responses |
 | Standalone bridge | Routes live capabilities and fails closed; demo needs an explicit request |
-| MCP protocol | Local stdio MCP adapter with 23 typed tools; bridge TCP remains internal |
+| MCP protocol | Local stdio MCP adapter with 25 typed tools; bridge TCP remains internal |
 | Long-running work | Process-local jobs with progress, cancellation, and deadline handling |
 | Write safety | Owned preview, default-No Deswik approval, single-use tokens, and exact-handle rollback |
 | Automated tests | Python suites and a C# bridge/MCP harness; live CAD gates remain manual |
@@ -132,11 +204,16 @@ center of gravity, volume, and vertex count. Unreadable metrics produce an
 explicit warning. Vertices and topology are not yet extracted, so CTX-02
 remains incomplete. A subsequent `get_cad_polyface_geometry` slice reads
 bounded pages of `VertexList` and raw `GetFaceIndexes` values from the
-installed 2025.2 DLL. Its original four live checks passed; expanded
-regression checks are pending. Index sign and edge-visibility conventions
-have not been normalized. `get_cad_polyline_geometry` now reads bounded
-vertex pages and the native closed flag, pending CAD acceptance. Neither
-page is design-ready. Other figure types remain planned.
+installed 2025.2 DLL. Its original and expanded live suites passed. Index sign
+and edge-visibility conventions have not been normalized.
+`get_cad_polyline_geometry` reads bounded vertex pages and the native closed
+flag; its combined launcher suite passed on 2026-09-29. A strict
+`get_cad_figure_geometry` reads native fields and user attributes for Line,
+Circle, Arc, Point, Text, and MText. Its broad live suite passed, except native
+Line could not be created in the installed UI and remains an explicit
+automated-only gap. `get_cad_points_geometry` now reads bounded pages and raw
+display metadata from native Points collections, pending live acceptance. None
+of these reads is design-ready. Remaining figure types remain planned.
 
 ### `CTX-03` Coordinate and angle conventions
 
@@ -383,6 +460,16 @@ Answer questions across CAD, UGDB, Scheduler, LHS, and reconciliation data while
 8. Add as-drilled and as-charged reconciliation.
 9. Add blast-performance feedback and operational integrations.
 10. Add AI assistance only over the deterministic, audited tool surface.
+11. Freeze a pilot release candidate only after gates `G0`–`G6` close; record
+    package hashes, supported build, owners, fixtures, and recovery procedure.
+12. Execute the three-node pilot and its success, refusal, stale-state,
+    interruption, replay, rollback, and no-mutation cases under `G8`.
+13. Review and sign the evidence pack under `G9`; unresolved critical safety or
+    data-integrity findings return to the owning feature gate.
+14. Prepare and approve a tightly scoped production release under `G10`, then
+    perform the monitored and reversible limited rollout in `G11`.
+15. Expand by site, Deswik build, profile, provider, and workflow only through
+    the separate acceptance and ongoing change-control gate `G12`.
 
 ## Definition of Done for Each Feature
 
@@ -395,3 +482,13 @@ Answer questions across CAD, UGDB, Scheduler, LHS, and reconciliation data while
 - Audit entry linking source entities to created or modified handles
 - Live Deswik.CAD acceptance test on each supported build
 - Mining engineer review before production use
+- One reusable `Run-Deswik-Tests.cmd` in the repository root; update it for the
+  current milestone instead of adding launchers. Archive each test intent and
+  observed result in its phase write-up. Exercise all meaningful valid,
+  boundary, refusal, repeatability, and no-mutation cases available at that
+  milestone; four checks are not a target or a cap.
+- Explicit gate disposition: built, live accepted, engineering approved,
+  pilot passed, limited-production approved, or scaled. These states are never
+  interchangeable.
+- Named evidence owner, approver, supported Deswik build, package/profile
+  versions, open defects, rollback result, and next allowed scope.

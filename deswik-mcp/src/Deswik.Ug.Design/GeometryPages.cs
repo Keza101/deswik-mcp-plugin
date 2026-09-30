@@ -98,3 +98,21 @@ public sealed record PolylineGeometryPage(
     [property: JsonPropertyName("coordinateSystem")] string CoordinateSystem,
     [property: JsonPropertyName("units")] string Units,
     [property: JsonPropertyName("readyForDesign")] bool ReadyForDesign);
+
+public sealed record PointsGeometryPage(
+    [property: JsonPropertyName("schemaVersion")] int SchemaVersion,
+    [property: JsonPropertyName("handle")] ulong Handle,
+    [property: JsonPropertyName("start")] int Start,
+    [property: JsonPropertyName("limit")] int Limit,
+    [property: JsonPropertyName("pointCount")] int PointCount,
+    [property: JsonPropertyName("points")] IReadOnlyList<Point3> Points,
+    [property: JsonPropertyName("nextStart")] int? NextStart,
+    [property: JsonPropertyName("isPointCloud")] bool IsPointCloud,
+    [property: JsonPropertyName("pointStyle")] string? PointStyle,
+    [property: JsonPropertyName("sizeType")] string? SizeType,
+    [property: JsonPropertyName("alignToView")] bool AlignToView,
+    [property: JsonPropertyName("alignToViewSize")] double AlignToViewSize,
+    [property: JsonPropertyName("extrusionVector")] Point3 ExtrusionVector,
+    [property: JsonPropertyName("coordinateSystem")] string CoordinateSystem,
+    [property: JsonPropertyName("units")] string Units,
+    [property: JsonPropertyName("readyForDesign")] bool ReadyForDesign);

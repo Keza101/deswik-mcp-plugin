@@ -75,6 +75,8 @@ try {
     $binaryText = [Text.Encoding]::Unicode.GetString([IO.File]::ReadAllBytes($addinPath))
     $checks['preview capability is in artifact'] = $binaryText.Contains('preview_ugdrillholes')
     $checks['rollback capability is in artifact'] = $binaryText.Contains('prepare_rollback_ugdrillholes')
+    $checks['simple figure geometry capability is in artifact'] = $binaryText.Contains('get_cad_figure_geometry')
+    $checks['points geometry capability is in artifact'] = $binaryText.Contains('get_cad_points_geometry')
     $guardType = $assembly.GetType('Deswik.Addin.GuardedWriteCoordinator', $true)
     $guardMethod = $guardType.GetMethod('RefreshDocumentIdentity',
         [Reflection.BindingFlags]'NonPublic,Instance')

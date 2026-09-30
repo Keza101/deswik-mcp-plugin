@@ -49,6 +49,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("operator roles and polyface metrics stay explicit and read-only", TestOperatorRoleContext),
     ("polyface geometry pages are bounded and preserve raw face indexes", TestPolyfaceGeometryPaging),
     ("polyline geometry pages preserve closed state and boundaries", TestPolylineGeometryPaging),
+    ("point collection pages preserve raw points and display metadata", TestPointsGeometryPaging),
+    ("simple figure geometry is typed strict and never design-ready", TestFigureGeometry),
 };
 
 try
@@ -267,6 +269,90 @@ static Task TestPolylineGeometryPaging()
     True(serialized.RootElement.GetProperty("closed").GetBoolean(), "closed flag was lost");
     False(serialized.RootElement.GetProperty("readyForDesign").GetBoolean(),
         "raw polyline was promoted to design-ready geometry");
+    return Task.CompletedTask;
+}
+
+static Task TestPointsGeometryPaging()
+{
+    var request = new GeometryPageRequest(84, 2, 2);
+    Equal(2, request.CountFor(5));
+    Equal(4, request.NextStart(5));
+    Equal(null, new GeometryPageRequest(84, 4, 2).NextStart(5));
+    Equal(0, new GeometryPageRequest(84, 6, 2).CountFor(5));
+    var page = new PointsGeometryPage(1, 84, 2, 2, 5,
+        new[] { new Point3(1, 2, 3), new Point3(4, 5, 6) }, 4,
+        false, "Cross", "Drawing", true, 2.5, new Point3(0, 0, 1),
+        "unknown", "unknown", false);
+    using var serialized = JsonDocument.Parse(JsonSerializer.Serialize(page));
+    Equal(2, serialized.RootElement.GetProperty("points").GetArrayLength());
+    Equal(5, serialized.RootElement.GetProperty("pointCount").GetInt32());
+    Equal("Cross", serialized.RootElement.GetProperty("pointStyle").GetString());
+    Equal(2.5, serialized.RootElement.GetProperty("alignToViewSize").GetDouble());
+    False(serialized.RootElement.GetProperty("readyForDesign").GetBoolean(),
+        "raw point collection was promoted to design-ready geometry");
+    return Task.CompletedTask;
+}
+
+static Task TestFigureGeometry()
+{
+    using var numeric = JsonDocument.Parse("{\"handle\":42}");
+    Equal(42UL, FigureGeometryRequest.Parse(numeric.RootElement).Handle);
+    using var hex = JsonDocument.Parse("{\"handle\":\"0x670\"}");
+    Equal(1648UL, FigureGeometryRequest.Parse(hex.RootElement).Handle);
+    Equal(6, FigureGeometrySnapshot.SupportedTypes.Count);
+    foreach (var type in new[] { "Line", "Circle", "Arc", "Point", "Text", "MText" })
+        True(FigureGeometrySnapshot.SupportedTypes.Contains(type), $"missing supported type {type}");
+
+    var line = new FigureGeometrySnapshot
+    {
+        Handle = 42, Guid = "g-line", Type = "Line", Layer = "TEST", Label = "L1",
+        StartPoint = new Point3(1, 2, 3), EndPoint = new Point3(4, 5, 6),
+        Length = 5.196152422706632, ExtrusionVector = new Point3(0, 0, 1),
+        Attributes = new SortedDictionary<string, object?> { ["DOMAIN"] = "WEST" },
+    }.Validate();
+    using var serialized = JsonDocument.Parse(JsonSerializer.Serialize(line));
+    Equal("Line", serialized.RootElement.GetProperty("type").GetString());
+    Equal(1.0, serialized.RootElement.GetProperty("startPoint").GetProperty("x").GetDouble());
+    Equal("WEST", serialized.RootElement.GetProperty("attributes").GetProperty("DOMAIN").GetString());
+    False(serialized.RootElement.GetProperty("readyForDesign").GetBoolean(),
+        "raw simple geometry was promoted to design-ready");
+    Equal("unknown", serialized.RootElement.GetProperty("units").GetString());
+    Equal("unknown", serialized.RootElement.GetProperty("angleUnits").GetString());
+
+    var text = new FigureGeometrySnapshot
+    {
+        Handle = 43, Guid = "g-text", Type = "MText", Text = "test fixture",
+        InsertionPoint = new Point3(10, 20, 30), Height = 0.5, Rotation = 45,
+    }.Validate();
+    Equal("test fixture", text.Text);
+    foreach (var invalid in new[]
+    {
+        "{}", "{\"handle\":0}", "{\"handle\":\"0x0\"}",
+        "{\"handle\":42,\"extra\":true}", "[]", "{\"handle\":null}",
+    })
+    {
+        using var bad = JsonDocument.Parse(invalid);
+        try { FigureGeometryRequest.Parse(bad.RootElement); throw new Exception("invalid figure request passed"); }
+        catch (ArgumentException) { }
+    }
+    try
+    {
+        (line with { Type = "Polyface" }).Validate();
+        throw new Exception("unsupported figure type passed");
+    }
+    catch (ArgumentException) { }
+    try
+    {
+        (line with { Length = double.NaN }).Validate();
+        throw new Exception("non-finite figure geometry passed");
+    }
+    catch (ArgumentException) { }
+    try
+    {
+        (line with { ReadyForDesign = true }).Validate();
+        throw new Exception("raw figure geometry claimed design readiness");
+    }
+    catch (ArgumentException) { }
     return Task.CompletedTask;
 }
 
@@ -521,6 +607,8 @@ static Task TestJobActionAllowlist()
     True(BridgeJobPolicy.CanSubmit("get_cad_layer_attributes"), "attribute read was excluded");
     True(BridgeJobPolicy.CanSubmit("get_cad_polyface_geometry"), "geometry page read was excluded");
     True(BridgeJobPolicy.CanSubmit("get_cad_polyline_geometry"), "polyline page read was excluded");
+    True(BridgeJobPolicy.CanSubmit("get_cad_points_geometry"), "points page read was excluded");
+    True(BridgeJobPolicy.CanSubmit("get_cad_figure_geometry"), "simple figure read was excluded");
     False(BridgeJobPolicy.CanSubmit("draw_cad_ugdrillholes"), "unfenced writer was accepted");
     False(BridgeJobPolicy.CanSubmit("register_addin"), "registration was accepted as a job");
     False(BridgeJobPolicy.CanSubmit("commit_ugdrillholes_extra"), "suffix bypassed allowlist");
@@ -649,12 +737,14 @@ static async Task TestJobDeadlineDuringWrite()
 static Task TestMcpToolCatalogue()
 {
     var names = McpToolCatalog.Tools.Select(tool => tool.Name).ToArray();
-    Equal(23, names.Length);
+    Equal(25, names.Length);
     Equal(names.Length, names.Distinct(StringComparer.Ordinal).Count());
     True(names.Contains("get_cad_document"), "CAD reads are missing");
     True(names.Contains("get_ug_selection_context"), "selected design snapshot is missing");
     True(names.Contains("get_cad_polyface_geometry"), "paged geometry read is missing");
     True(names.Contains("get_cad_polyline_geometry"), "paged polyline read is missing");
+    True(names.Contains("get_cad_points_geometry"), "paged points read is missing");
+    True(names.Contains("get_cad_figure_geometry"), "simple figure geometry read is missing");
     True(names.Contains("commit_ugdrillholes"), "guarded commit is missing");
     True(names.Contains("job.submit"), "async jobs are missing");
     True(names.Contains("map.inspect"), "read-only Process Map inspection is missing");
@@ -714,7 +804,7 @@ static async Task TestMcpReadRoundTrip()
 
     using var listed = JsonDocument.Parse((await adapter.ProcessLineAsync(
         "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}"))!);
-    Equal(23, listed.RootElement.GetProperty("result").GetProperty("tools").GetArrayLength());
+    Equal(25, listed.RootElement.GetProperty("result").GetProperty("tools").GetArrayLength());
 
     using var called = JsonDocument.Parse((await adapter.ProcessLineAsync(
         "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"get_cad_document\",\"arguments\":{}}}"))!);
@@ -741,6 +831,18 @@ static async Task TestMcpReadRoundTrip()
         "polyline page tool failed");
     Equal("get_cad_polyline_geometry", bridge.Calls.Last());
     Equal(1, bridge.Arguments.Last().GetProperty("start").GetInt32());
+    using var pointsCall = JsonDocument.Parse((await adapter.ProcessLineAsync(
+        "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"get_cad_points_geometry\",\"arguments\":{\"handle\":84,\"start\":2,\"limit\":50}}}"))!);
+    False(pointsCall.RootElement.GetProperty("result").GetProperty("isError").GetBoolean(),
+        "points page tool failed");
+    Equal("get_cad_points_geometry", bridge.Calls.Last());
+    Equal(50, bridge.Arguments.Last().GetProperty("limit").GetInt32());
+    using var figureCall = JsonDocument.Parse((await adapter.ProcessLineAsync(
+        "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\":\"get_cad_figure_geometry\",\"arguments\":{\"handle\":43}}}"))!);
+    False(figureCall.RootElement.GetProperty("result").GetProperty("isError").GetBoolean(),
+        "simple figure tool failed");
+    Equal("get_cad_figure_geometry", bridge.Calls.Last());
+    Equal(43UL, bridge.Arguments.Last().GetProperty("handle").GetUInt64());
 }
 
 static async Task TestMcpStdioRoundTrip()
@@ -810,7 +912,7 @@ static async Task TestMcpStdioRoundTrip()
     using var listed = await Exchange(
         "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}");
     var tools = listed.RootElement.GetProperty("result").GetProperty("tools");
-    Equal(23, tools.GetArrayLength());
+    Equal(25, tools.GetArrayLength());
     True(tools[0].TryGetProperty("name", out _), "tools/list did not use MCP field casing");
     True(tools[0].TryGetProperty("inputSchema", out _), "tools/list omitted inputSchema");
 

@@ -9,6 +9,7 @@ docs/Backup/
 !.gitignore
 !.gitattributes
 !README.md
+!Run-Deswik-Tests.cmd
 !docs/
 !deswik_pm/
 !tests/
@@ -33,6 +34,9 @@ deswik-mcp/src/*
 deswik-mcp/tools/*
 !deswik-mcp/tools/deswik.ps1
 !deswik-mcp/tools/Test-AddinPreflight.ps1
+!deswik-mcp/tools/Run-DeswikTestSetup.ps1
+!deswik-mcp/tools/Start-DeswikTestBridge.ps1
+!deswik-mcp/tools/Invoke-DeswikLiveTests.ps1
 
 # build output
 **/bin/

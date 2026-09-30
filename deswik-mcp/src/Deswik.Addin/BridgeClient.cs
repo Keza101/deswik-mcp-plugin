@@ -88,6 +88,8 @@ internal class BridgeClient : IDisposable
                         "get_cad_polyface_info",
                         "get_cad_polyface_geometry",
                         "get_cad_polyline_geometry",
+                        "get_cad_points_geometry",
+                        "get_cad_figure_geometry",
                         "slice_cad_polyface",
                         "draw_cad_blastholes",
                         "get_cad_blasthole_details",

@@ -2,6 +2,15 @@
 
 Every entry here was hit for real during development.
 
+## Running live acceptance
+Close Deswik.CAD and any old bridge, then double-click the single reusable
+`Run-Deswik-Tests.cmd` in the repository root. It builds, runs regressions and
+preflight, starts the bridge, and opens the current guided suite. Do not create
+another root launcher for a new phase; update this one and archive the test
+intent and human-reported result in `docs/bridge-phases/`. Current suites should
+exercise every practical valid, boundary, refusal, repeatability/stress, and
+no-mutation case rather than stopping at four checks.
+
 ## "Constructor not found" when loading the plugin
 The loader needs a `ctor(Deswik.Graphics.Application)`. A parameterless
 constructor alone is not enough.
